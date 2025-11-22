@@ -100,6 +100,9 @@ class Version:
     def __lt__(self, other: 'Version') -> bool:
         return self.compare(other) < 0
 
+    def __le__(self, other: 'Version') -> bool:
+        return self.compare(other) <= 0
+
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Version):
             return False
@@ -107,6 +110,9 @@ class Version:
 
     def __gt__(self, other: 'Version') -> bool:
         return self.compare(other) > 0
+
+    def __ge__(self, other: 'Version') -> bool:
+        return self.compare(other) >= 0
 
 
 class QuantumVersionManager:
