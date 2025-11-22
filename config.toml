@@ -1,0 +1,408 @@
+# ARK95X Omnikernel Orchestrator Configuration
+# This file controls high-level settings for the unified intelligence stack
+
+# ============================================================================
+# Core Model Settings
+# ============================================================================
+
+# Default model used across the orchestrator
+model = "hlm-9"
+
+# Model provider (openai, anthropic, ollama, local, etc.)
+model_provider = "openai"
+
+# Reasoning effort for supported models (low, medium, high)
+model_reasoning_effort = "medium"
+
+# Temperature for model responses (0.0 - 2.0)
+model_temperature = 0.7
+
+# Maximum tokens for model responses
+model_max_tokens = 4096
+
+# ============================================================================
+# Orchestrator Settings
+# ============================================================================
+
+# Orchestrator operation mode (autonomous, supervised, interactive)
+orchestrator_mode = "supervised"
+
+# Maximum concurrent agents
+max_concurrent_agents = 5
+
+# Agent timeout in seconds
+agent_timeout = 300
+
+# Enable distributed orchestration across multiple nodes
+distributed_mode = false
+
+# Heartbeat interval for agent health checks (seconds)
+heartbeat_interval = 30
+
+# ============================================================================
+# CrewAI Agent Configuration
+# ============================================================================
+
+[crewai]
+# Enable CrewAI agent framework
+enabled = true
+
+# Default crew size
+default_crew_size = 3
+
+# Agent collaboration mode (sequential, parallel, hierarchical)
+collaboration_mode = "hierarchical"
+
+# Enable agent memory persistence
+memory_enabled = true
+
+# Memory backend (redis, postgresql, local)
+memory_backend = "local"
+
+# Agent delegation allowed
+allow_delegation = true
+
+# Maximum delegation depth
+max_delegation_depth = 2
+
+# ============================================================================
+# Clone Manager Configuration
+# ============================================================================
+
+[clone_manager]
+# Enable clone manager for agent replication
+enabled = true
+
+# Maximum number of clones per agent
+max_clones = 10
+
+# Clone lifecycle policy (ephemeral, persistent, hybrid)
+lifecycle_policy = "hybrid"
+
+# Auto-scale based on load
+auto_scale = true
+
+# Scale-up threshold (0.0 - 1.0)
+scale_up_threshold = 0.75
+
+# Scale-down threshold (0.0 - 1.0)
+scale_down_threshold = 0.25
+
+# Clone warmup time in seconds
+warmup_time = 5
+
+# ============================================================================
+# Gatekeeper Security Configuration
+# ============================================================================
+
+[gatekeeper]
+# Enable gatekeeper security layer
+enabled = true
+
+# Approval policy (always, never, on-request, untrusted, risky-only)
+approval_policy = "on-request"
+
+# Sandbox mode (disabled, read-only, workspace-write, full-access)
+sandbox_mode = "workspace-write"
+
+# Rate limiting (requests per minute)
+rate_limit = 100
+
+# Enable input validation
+input_validation = true
+
+# Enable output sanitization
+output_sanitization = true
+
+# Allowed command patterns (regex)
+allowed_commands = [
+    "^(ls|cat|grep|find|echo).*",
+    "^python .*",
+    "^node .*"
+]
+
+# Blocked command patterns (regex)
+blocked_commands = [
+    "^(rm -rf|sudo|chmod 777).*",
+    ".*format.*",
+    ".*delete.*database.*"
+]
+
+# ============================================================================
+# Decision Router Configuration
+# ============================================================================
+
+[decision_router]
+# Enable decision router
+enabled = true
+
+# Routing strategy (round-robin, weighted, least-loaded, semantic, hybrid)
+routing_strategy = "hybrid"
+
+# Enable intelligent task classification
+task_classification = true
+
+# Fallback strategy when primary agent fails (retry, delegate, escalate, abort)
+fallback_strategy = "delegate"
+
+# Maximum retry attempts
+max_retries = 3
+
+# Retry backoff multiplier
+retry_backoff = 2.0
+
+# Enable routing analytics
+analytics_enabled = true
+
+# ============================================================================
+# Restaurant Operations Settings
+# ============================================================================
+
+[restaurant]
+# Operating hours (24-hour format)
+operating_hours_start = "08:00"
+operating_hours_end = "22:00"
+
+# Timezone
+timezone = "America/New_York"
+
+# Enable order processing
+order_processing_enabled = true
+
+# Enable inventory management
+inventory_management_enabled = true
+
+# Enable customer service automation
+customer_service_enabled = true
+
+# Reservation system integration
+reservation_system = "integrated"
+
+# POS system integration
+pos_integration = "enabled"
+
+# ============================================================================
+# Shell Environment Policy
+# ============================================================================
+
+[shell_environment_policy]
+# Environment variables to include
+include_only = [
+    "PATH",
+    "HOME",
+    "USER",
+    "LANG",
+    "LC_ALL",
+    "PYTHONPATH",
+    "NODE_PATH"
+]
+
+# Additional environment variables to exclude
+exclude = [
+    "AWS_SECRET_ACCESS_KEY",
+    "DATABASE_PASSWORD",
+    "API_SECRET"
+]
+
+# ============================================================================
+# Logging and Monitoring
+# ============================================================================
+
+[logging]
+# Log level (debug, info, warning, error, critical)
+level = "info"
+
+# Log format (json, text, structured)
+format = "json"
+
+# Log output (stdout, file, both)
+output = "both"
+
+# Log file path (when output includes file)
+file_path = "/var/log/omnikernel/orchestrator.log"
+
+# Log rotation
+rotation_enabled = true
+max_file_size = "100MB"
+max_backup_count = 10
+
+[monitoring]
+# Enable metrics collection
+metrics_enabled = true
+
+# Metrics backend (prometheus, statsd, datadog)
+metrics_backend = "prometheus"
+
+# Metrics port
+metrics_port = 9090
+
+# Enable tracing
+tracing_enabled = false
+
+# Tracing backend (jaeger, zipkin, opentelemetry)
+tracing_backend = "opentelemetry"
+
+# ============================================================================
+# Model Providers
+# ============================================================================
+
+[model_providers.openai]
+name = "OpenAI"
+base_url = "https://api.openai.com/v1"
+env_key = "OPENAI_API_KEY"
+wire_api = "chat"
+models = ["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo"]
+
+[model_providers.anthropic]
+name = "Anthropic"
+base_url = "https://api.anthropic.com/v1"
+env_key = "ANTHROPIC_API_KEY"
+wire_api = "messages"
+models = ["claude-3-opus", "claude-3-sonnet", "claude-3-haiku"]
+
+[model_providers.ollama]
+name = "Ollama"
+base_url = "http://localhost:11434/v1"
+wire_api = "chat"
+models = ["llama2", "mistral", "mixtral"]
+
+[model_providers.hlm]
+name = "HLM (High-Level Model)"
+base_url = "http://localhost:8000/v1"
+env_key = "HLM_API_KEY"
+wire_api = "chat"
+models = ["hlm-9", "hlm-7", "hlm-5"]
+
+# ============================================================================
+# Feature Flags
+# ============================================================================
+
+[features]
+# Enable unified exec tool
+unified_exec = false
+
+# Enable streamable shell
+streamable_shell = true
+
+# Enable web search capabilities
+web_search_request = true
+
+# Enable vision/image processing
+view_image_tool = true
+
+# Enable experimental sandbox risk assessment
+experimental_sandbox_command_assessment = false
+
+# Enable ghost commit tracking
+ghost_commit = false
+
+# Enable multi-modal processing
+multi_modal_processing = true
+
+# Enable agent collaboration
+agent_collaboration = true
+
+# Enable real-time analytics
+realtime_analytics = true
+
+# Enable auto-recovery
+auto_recovery = true
+
+# Enable semantic caching
+semantic_caching = true
+
+# Enable knowledge graph integration
+knowledge_graph = false
+
+# ============================================================================
+# Profiles
+# ============================================================================
+
+# Default profile to use (optional)
+# profile = "production"
+
+[profiles.development]
+model = "gpt-3.5-turbo"
+orchestrator_mode = "interactive"
+approval_policy = "always"
+sandbox_mode = "workspace-write"
+logging.level = "debug"
+max_concurrent_agents = 3
+
+[profiles.production]
+model = "hlm-9"
+orchestrator_mode = "autonomous"
+approval_policy = "risky-only"
+sandbox_mode = "workspace-write"
+logging.level = "warning"
+max_concurrent_agents = 10
+distributed_mode = true
+monitoring.metrics_enabled = true
+monitoring.tracing_enabled = true
+
+[profiles.testing]
+model = "gpt-4-turbo"
+orchestrator_mode = "supervised"
+approval_policy = "on-request"
+sandbox_mode = "read-only"
+logging.level = "info"
+max_concurrent_agents = 5
+
+[profiles.high-security]
+model = "hlm-9"
+model_reasoning_effort = "high"
+orchestrator_mode = "supervised"
+approval_policy = "always"
+sandbox_mode = "read-only"
+gatekeeper.enabled = true
+gatekeeper.input_validation = true
+gatekeeper.output_sanitization = true
+gatekeeper.rate_limit = 50
+
+[profiles.lightweight]
+model = "gpt-3.5-turbo"
+orchestrator_mode = "autonomous"
+approval_policy = "never"
+max_concurrent_agents = 2
+logging.level = "error"
+features.streamable_shell = false
+features.realtime_analytics = false
+
+# ============================================================================
+# Advanced Settings
+# ============================================================================
+
+[advanced]
+# Enable experimental features globally
+experimental_mode = false
+
+# Custom plugins directory
+plugins_dir = "./plugins"
+
+# Enable plugin hot-reload
+plugin_hot_reload = false
+
+# API server port
+api_port = 8080
+
+# Enable CORS
+cors_enabled = true
+
+# Allowed origins for CORS
+cors_origins = ["http://localhost:3000", "http://localhost:8080"]
+
+# Database connection string
+# database_url = "postgresql://user:pass@localhost:5432/omnikernel"
+
+# Redis connection string
+# redis_url = "redis://localhost:6379/0"
+
+# Message queue backend (rabbitmq, kafka, redis)
+message_queue = "redis"
+
+# Worker pool size
+worker_pool_size = 4
+
+# Enable graceful shutdown
+graceful_shutdown = true
+shutdown_timeout = 30

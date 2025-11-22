@@ -1,0 +1,141 @@
+# ARK95X Omnikernel Orchestrator - Example Configuration
+# Copy this file to config.toml and customize for your needs
+# For full documentation, see CONFIG.md
+
+# ============================================================================
+# QUICK START - Minimal Configuration
+# ============================================================================
+
+# Model to use (hlm-9, gpt-4, gpt-3.5-turbo, claude-3-opus, etc.)
+model = "hlm-9"
+
+# Model provider (openai, anthropic, ollama, hlm)
+model_provider = "openai"
+
+# Operation mode (autonomous, supervised, interactive)
+orchestrator_mode = "supervised"
+
+# ============================================================================
+# COMMON SETTINGS
+# ============================================================================
+
+# How many agents can run at once
+max_concurrent_agents = 5
+
+# Approval policy (always, never, on-request, risky-only)
+[gatekeeper]
+approval_policy = "on-request"
+
+# Sandbox mode (disabled, read-only, workspace-write, full-access)
+sandbox_mode = "workspace-write"
+
+# ============================================================================
+# CREWAI AGENTS
+# ============================================================================
+
+[crewai]
+enabled = true
+default_crew_size = 3
+collaboration_mode = "hierarchical"
+memory_enabled = true
+allow_delegation = true
+
+# ============================================================================
+# CLONE MANAGER
+# ============================================================================
+
+[clone_manager]
+enabled = true
+max_clones = 10
+auto_scale = true
+lifecycle_policy = "hybrid"
+
+# ============================================================================
+# DECISION ROUTER
+# ============================================================================
+
+[decision_router]
+enabled = true
+routing_strategy = "hybrid"
+task_classification = true
+fallback_strategy = "delegate"
+max_retries = 3
+
+# ============================================================================
+# RESTAURANT OPERATIONS
+# ============================================================================
+
+[restaurant]
+operating_hours_start = "08:00"
+operating_hours_end = "22:00"
+timezone = "America/New_York"
+order_processing_enabled = true
+inventory_management_enabled = true
+customer_service_enabled = true
+
+# ============================================================================
+# LOGGING
+# ============================================================================
+
+[logging]
+level = "info"
+format = "json"
+output = "both"
+
+# ============================================================================
+# PROFILES - Quick environment switching
+# ============================================================================
+
+# Uncomment to set a default profile
+# profile = "development"
+
+[profiles.development]
+model = "gpt-3.5-turbo"
+orchestrator_mode = "interactive"
+approval_policy = "always"
+max_concurrent_agents = 3
+logging.level = "debug"
+
+[profiles.production]
+model = "hlm-9"
+orchestrator_mode = "autonomous"
+approval_policy = "risky-only"
+max_concurrent_agents = 10
+distributed_mode = true
+logging.level = "warning"
+
+# ============================================================================
+# FEATURE FLAGS - Enable/disable optional features
+# ============================================================================
+
+[features]
+streamable_shell = true
+web_search_request = true
+view_image_tool = true
+multi_modal_processing = true
+agent_collaboration = true
+realtime_analytics = true
+auto_recovery = true
+semantic_caching = true
+
+# ============================================================================
+# ADVANCED - Usually don't need to change these
+# ============================================================================
+
+# Uncomment and configure if needed
+# [advanced]
+# api_port = 8080
+# worker_pool_size = 4
+# graceful_shutdown = true
+# shutdown_timeout = 30
+
+# ============================================================================
+# MODEL PROVIDERS - Add custom providers here
+# ============================================================================
+
+# Example: Custom OpenAI-compatible provider
+# [model_providers.my_provider]
+# name = "My Custom Provider"
+# base_url = "https://api.example.com/v1"
+# env_key = "MY_API_KEY"
+# wire_api = "chat"
