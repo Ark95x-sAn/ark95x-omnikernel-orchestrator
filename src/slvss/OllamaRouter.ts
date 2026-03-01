@@ -1,7 +1,7 @@
 /**
- * OllamaRouter.ts - Sovereign Model Router for ARK95X
- * Routes inference requests across local Ollama models
- * Handles health checks, model selection, and load balancing
+ * OllamaRouter.ts - Sovereign 9-Model HLM Router for ARK95X
+ * Routes inference across 9 Ollama models aligned to HLM-9 neural channels
+ * Browser operations sync, advancement systems, alignment level-ups
  * ARK95X Omnikernel Orchestrator - SLVSS Module
  */
 
@@ -27,6 +27,8 @@ export interface GenerateResponse {
   context: number[];
   totalDuration: number;
   evalCount: number;
+  channel?: string;
+  alignmentLevel?: number;
 }
 
 export interface EmbeddingResponse {
@@ -39,78 +41,151 @@ export interface RouterMetrics {
   modelHits: Record<string, number>;
   errors: number;
   lastHealthCheck: number;
+  channelSync: Record<string, ChannelState>;
 }
 
-const MODEL_PRIORITY: Record<string, number> = {
-  'deepseek-r1:latest': 100,
-  'llama3.1:70b': 95,
-  'mixtral:8x7b': 90,
-  'llama3.1:8b': 80,
-  'mistral:latest': 75,
-  'phi3:latest': 60,
-  'nomic-embed-text:latest': 50,
+export interface ChannelState {
+  model: string;
+  level: number;
+  xp: number;
+  xpToNext: number;
+  status: 'idle' | 'active' | 'syncing' | 'advancing';
+  lastSync: number;
+}
+
+export interface BrowserOpsState {
+  activeTabs: number;
+  syncedAgents: string[];
+  lastBrowserSync: number;
+  operationsQueue: string[];
+}
+
+const HLM9_CHANNELS: Record<string, { model: string; priority: number; role: string }> = {
+  alpha:   { model: 'deepseek-r1:latest',       priority: 100, role: 'reasoning-core' },
+  beta:    { model: 'llama3.1:70b',              priority: 95,  role: 'analysis-engine' },
+  gamma:   { model: 'mixtral:8x7b',              priority: 90,  role: 'general-ops' },
+  delta:   { model: 'llama3.1:8b',               priority: 85,  role: 'fast-response' },
+  epsilon: { model: 'mistral:latest',            priority: 80,  role: 'task-executor' },
+  zeta:    { model: 'phi3:latest',               priority: 75,  role: 'light-compute' },
+  eta:     { model: 'codellama:34b',             priority: 70,  role: 'code-generation' },
+  theta:   { model: 'nomic-embed-text:latest',   priority: 65,  role: 'embedding-memory' },
+  iota:    { model: 'qwen2:7b',                  priority: 60,  role: 'browser-ops' },
 };
 
 const TASK_MODEL_MAP: Record<string, string[]> = {
-  reasoning: ['deepseek-r1:latest', 'llama3.1:70b', 'mixtral:8x7b'],
-  code: ['deepseek-r1:latest', 'llama3.1:70b'],
-  embedding: ['nomic-embed-text:latest'],
-  fast: ['llama3.1:8b', 'mistral:latest', 'phi3:latest'],
-  general: ['mixtral:8x7b', 'llama3.1:8b', 'mistral:latest'],
+  reasoning:  ['alpha', 'beta', 'gamma'],
+  code:       ['alpha', 'eta', 'beta'],
+  embedding:  ['theta'],
+  fast:       ['delta', 'epsilon', 'zeta'],
+  general:    ['gamma', 'delta', 'epsilon'],
+  browser:    ['iota', 'delta', 'zeta'],
+  analysis:   ['beta', 'alpha', 'gamma'],
+  operations: ['epsilon', 'delta', 'iota'],
 };
+
+const LEVEL_XP_TABLE = [0, 100, 300, 600, 1000, 1500, 2100, 2800, 3600, 4500];
 
 export class OllamaRouter {
   private host: string;
   private availableModels: OllamaModel[] = [];
+  private channels: Record<string, ChannelState> = {};
+  private browserOps: BrowserOpsState = {
+    activeTabs: 0,
+    syncedAgents: [],
+    lastBrowserSync: 0,
+    operationsQueue: [],
+  };
   private metrics: RouterMetrics = {
     totalRequests: 0,
     totalLatency: 0,
     modelHits: {},
     errors: 0,
     lastHealthCheck: 0,
+    channelSync: {},
   };
 
   constructor(host: string = 'http://localhost:11434') {
     this.host = host.replace(/\/$/, '');
+    this.initChannels();
+  }
+
+  private initChannels(): void {
+    for (const [name, cfg] of Object.entries(HLM9_CHANNELS)) {
+      this.channels[name] = {
+        model: cfg.model,
+        level: 1,
+        xp: 0,
+        xpToNext: LEVEL_XP_TABLE[1],
+        status: 'idle',
+        lastSync: 0,
+      };
+    }
+    this.metrics.channelSync = { ...this.channels };
+    console.log(`[OllamaRouter] 9 HLM channels initialized`);
   }
 
   async healthCheck(): Promise<boolean> {
     try {
       const res = await fetch(`${this.host}/api/tags`);
-      if (!res.ok) throw new Error(`Ollama returned ${res.status}`);
+      if (!res.ok) throw new Error(`Ollama ${res.status}`);
       const data = await res.json();
       this.availableModels = data.models || [];
       this.metrics.lastHealthCheck = Date.now();
-      console.log(`[OllamaRouter] Health OK - ${this.availableModels.length} models loaded`);
-      for (const m of this.availableModels) {
-        console.log(`  -> ${m.name} (${(m.size / 1e9).toFixed(1)}GB)`);
-      }
+      this.syncChannelAvailability();
       return true;
     } catch (err) {
-      console.error(`[OllamaRouter] Health check FAILED:`, err);
       this.metrics.errors++;
       return false;
     }
   }
 
-  selectModel(taskType: string = 'general'): string {
-    const candidates = TASK_MODEL_MAP[taskType] || TASK_MODEL_MAP.general;
+  private syncChannelAvailability(): void {
     const available = this.availableModels.map((m) => m.name);
-    for (const candidate of candidates) {
-      if (available.includes(candidate)) return candidate;
+    for (const [name, state] of Object.entries(this.channels)) {
+      state.lastSync = Date.now();
     }
-    if (available.length > 0) {
-      return available.sort(
-        (a, b) => (MODEL_PRIORITY[b] || 0) - (MODEL_PRIORITY[a] || 0)
-      )[0];
+  }
+
+  selectModel(taskType: string = 'general'): string {
+    const channelNames = TASK_MODEL_MAP[taskType] || TASK_MODEL_MAP.general;
+    const available = this.availableModels.map((m) => m.name);
+    for (const chName of channelNames) {
+      const ch = this.channels[chName];
+      if (ch && available.includes(ch.model)) {
+        ch.status = 'active';
+        return ch.model;
+      }
     }
-    return 'mistral:latest';
+    return available[0] || 'mistral:latest';
+  }
+
+  private getChannelByModel(model: string): string {
+    for (const [name, cfg] of Object.entries(HLM9_CHANNELS)) {
+      if (cfg.model === model) return name;
+    }
+    return '';
+  }
+
+  private awardXP(channelName: string, xp: number): void {
+    const ch = this.channels[channelName];
+    if (!ch) return;
+    ch.xp += xp;
+    while (ch.xp >= ch.xpToNext && ch.level < LEVEL_XP_TABLE.length - 1) {
+      ch.level++;
+      ch.status = 'advancing';
+      ch.xpToNext = LEVEL_XP_TABLE[ch.level] || ch.xpToNext * 2;
+      console.log(`[LEVEL UP] ${channelName} => Lv${ch.level}`);
+    }
+    ch.status = 'idle';
+    this.metrics.channelSync[channelName] = { ...ch };
   }
 
   async generate(req: GenerateRequest): Promise<GenerateResponse> {
     const start = Date.now();
     this.metrics.totalRequests++;
     this.metrics.modelHits[req.model] = (this.metrics.modelHits[req.model] || 0) + 1;
+    const channelName = this.getChannelByModel(req.model);
+    if (channelName) this.channels[channelName].status = 'active';
     try {
       const res = await fetch(`${this.host}/api/generate`, {
         method: 'POST',
@@ -121,16 +196,20 @@ export class OllamaRouter {
       const data = await res.json();
       const latency = Date.now() - start;
       this.metrics.totalLatency += latency;
-      console.log(`[OllamaRouter] ${req.model} responded in ${latency}ms`);
+      const xpGain = Math.max(10, Math.floor(100 - latency / 100));
+      if (channelName) this.awardXP(channelName, xpGain);
       return {
         model: data.model,
         response: data.response,
         context: data.context || [],
         totalDuration: data.total_duration || latency,
         evalCount: data.eval_count || 0,
+        channel: channelName || undefined,
+        alignmentLevel: channelName ? this.channels[channelName].level : undefined,
       };
     } catch (err) {
       this.metrics.errors++;
+      if (channelName) this.channels[channelName].status = 'idle';
       throw err;
     }
   }
@@ -144,32 +223,44 @@ export class OllamaRouter {
     });
     if (!res.ok) throw new Error(`Embedding failed: ${res.status}`);
     const data = await res.json();
+    this.awardXP('theta', 15);
     return { embedding: data.embedding };
   }
 
-  async routeAndGenerate(
-    prompt: string,
-    taskType: string = 'general',
-    systemPrompt?: string
-  ): Promise<GenerateResponse> {
+  async routeAndGenerate(prompt: string, taskType: string = 'general', systemPrompt?: string): Promise<GenerateResponse> {
     const model = this.selectModel(taskType);
-    return this.generate({
-      model,
-      prompt,
-      system: systemPrompt,
-      temperature: taskType === 'reasoning' ? 0.1 : 0.7,
-    });
+    return this.generate({ model, prompt, system: systemPrompt, temperature: taskType === 'reasoning' ? 0.1 : 0.7 });
   }
 
-  getMetrics(): RouterMetrics {
-    return { ...this.metrics };
+  async syncAll(): Promise<Record<string, ChannelState>> {
+    console.log('[OllamaRouter] === FULL SYNC ALL 9 CHANNELS ===');
+    await this.healthCheck();
+    for (const [name, ch] of Object.entries(this.channels)) {
+      ch.status = 'syncing';
+      ch.lastSync = Date.now();
+      ch.status = 'idle';
+    }
+    this.metrics.channelSync = { ...this.channels };
+    return { ...this.channels };
   }
 
-  getAvailableModels(): OllamaModel[] {
-    return [...this.availableModels];
+  syncBrowserOps(tabs: number, agents: string[]): BrowserOpsState {
+    this.browserOps = { activeTabs: tabs, syncedAgents: agents, lastBrowserSync: Date.now(), operationsQueue: [] };
+    this.awardXP('iota', 5 * tabs);
+    return { ...this.browserOps };
   }
 
-  getHost(): string {
-    return this.host;
+  getAlignmentStatus(): Record<string, { level: number; xp: number; model: string; role: string }> {
+    const status: Record<string, any> = {};
+    for (const [name, ch] of Object.entries(this.channels)) {
+      status[name] = { level: ch.level, xp: ch.xp, model: ch.model, role: HLM9_CHANNELS[name]?.role || 'unknown' };
+    }
+    return status;
   }
+
+  getMetrics(): RouterMetrics { return { ...this.metrics }; }
+  getAvailableModels(): OllamaModel[] { return [...this.availableModels]; }
+  getChannels(): Record<string, ChannelState> { return { ...this.channels }; }
+  getBrowserOps(): BrowserOpsState { return { ...this.browserOps }; }
+  getHost(): string { return this.host; }
 }
