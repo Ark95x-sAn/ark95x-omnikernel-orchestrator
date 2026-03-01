@@ -1,0 +1,44 @@
+# ARK95X Omnikernel Orchestrator - Dependencies
+# Core
+aiohttp>=3.9.0
+aiofiles>=23.2.0
+pydantic>=2.5.0
+uvicorn>=0.25.0
+fastapi>=0.108.0
+httpx>=0.26.0
+
+# AI/ML Model Integration
+openai>=1.6.0
+ollama>=0.1.6
+langchain>=0.1.0
+langchain-community>=0.0.10
+crewai>=0.1.0
+
+# Vector Store / Memory
+qdrant-client>=1.7.0
+chromadb>=0.4.22
+
+# Observability
+prometheus-client>=0.19.0
+structlog>=23.3.0
+rich>=13.7.0
+
+# Task Queue / Scheduling
+celery>=5.3.6
+redis>=5.0.1
+apscheduler>=3.10.4
+
+# Configuration
+python-dotenv>=1.0.0
+pyyaml>=6.0.1
+
+# Utilities
+orjson>=3.9.10
+tenacity>=8.2.3
+cachetools>=5.3.2
+psutil>=5.9.7
+
+# Testing
+pytest>=7.4.4
+pytest-asyncio>=0.23.3
+pytest-cov>=4.1.0
