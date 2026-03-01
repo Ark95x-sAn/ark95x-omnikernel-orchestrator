@@ -1,0 +1,37 @@
+version: "3.8"
+
+services:
+  ai-engineer:
+    build: ./ai-engineer
+    container_name: ark95x-ai-engineer
+    ports:
+      - "8501:8501"
+    restart: unless-stopped
+    labels:
+      - "flame.service=ai-engineer"
+      - "flame.type=creation"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  flame-arsenal:
+    build: ./flame-arsenal
+    container_name: ark95x-flame-arsenal
+    ports:
+      - "8502:8502"
+    restart: unless-stopped
+    labels:
+      - "flame.service=flame-arsenal"
+      - "flame.type=educational"
+      - "flame.lock=sentinel"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8502/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+networks:
+  default:
+    name: ark95x-creations-net
