@@ -1,0 +1,57 @@
+{
+  "name": "ARK95X Creation Milestone Pipeline",
+  "version": "3.0",
+  "description": "Triggers on every creation milestone - routes to Legacy Vault and Neuro-Nura",
+  "pipelines": [
+    {
+      "id": "milestone-tracker",
+      "trigger": "webhook",
+      "webhook_path": "/ark95x/milestone",
+      "actions": [
+        {
+          "type": "http_request",
+          "url": "http://localhost:8501/api/status",
+          "method": "GET",
+          "description": "Fetch current roadmap progress"
+        },
+        {
+          "type": "http_request",
+          "url": "http://localhost:8502/api/arsenal",
+          "method": "GET",
+          "description": "Fetch arsenal status"
+        },
+        {
+          "type": "ollama_ingest",
+          "url": "http://localhost:11434/api/generate",
+          "model": "llama3.2",
+          "description": "Ingest milestone data into vector memory"
+        }
+      ]
+    },
+    {
+      "id": "legacy-vault-sync",
+      "trigger": "cron",
+      "schedule": "0 */6 * * *",
+      "actions": [
+        {
+          "type": "git_commit",
+          "repo": "ark95x-omnikernel-orchestrator",
+          "branch": "main",
+          "message": "Legacy Vault auto-sync: ${timestamp}",
+          "description": "Auto-commit progress updates to GitHub"
+        }
+      ]
+    },
+    {
+      "id": "agent-routing",
+      "description": "Agent dispatch configuration",
+      "agents": {
+        "agent-14": {"role": "Architect", "triggers": ["system-design", "infrastructure"]},
+        "agent-09": {"role": "Builder", "triggers": ["code-deploy", "container-build"]},
+        "agent-07": {"role": "OpsDrone", "triggers": ["monitoring", "health-check"]},
+        "agent-06": {"role": "Signals", "triggers": ["data-ingest", "webhook-receive"]},
+        "agent-05": {"role": "Sentinel", "triggers": ["security-audit", "access-control"]}
+      }
+    }
+  ]
+}
