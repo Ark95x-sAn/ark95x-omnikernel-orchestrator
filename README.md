@@ -35,7 +35,7 @@ cp .env.example .env
 python main.py --api
 
 # Or run standalone
-python main.py
+python  main.py
 ```
 
 ## API Endpoints
