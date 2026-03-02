@@ -1,0 +1,59 @@
+{
+  "app_name": "ARK95X Omnikernel Orchestrator",
+  "version": "1.2.0",
+  "ollama_url": "http://localhost:11434",
+  "openai_api_key": "",
+  "anthropic_api_key": "",
+  "default_local_model": "llama3.1",
+  "default_cloud_model": "gpt-4o",
+  "max_tokens": 2048,
+  "temperature": 0.7,
+  "privacy_mode": false,
+  "autonomy_level": 4,
+  "score_threshold": 6.0,
+  "reflection_db": "ark95x_reflection.db",
+  "mcpServers": {
+    "everything": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-everything"]
+    },
+    "ark95x-local": {
+      "command": "python3",
+      "args": ["-m", "mcp.server"],
+      "env": {
+        "OLLAMA_URL": "http://localhost:11434",
+        "ARK95X_AGENT": "omnikernel",
+        "MCP_LOG_LEVEL": "INFO"
+      }
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"]
+    },
+    "mcp-installer": {
+      "command": "npx",
+      "args": ["-y", "@anaisbetts/mcp-installer"]
+    }
+  },
+  "a2a": {
+    "agent_card_path": "/.well-known/agent.json",
+    "task_endpoint": "/tasks/send",
+    "stream_endpoint": "/tasks/sendSubscribe",
+    "auth_scheme": "oauth2",
+    "tls_required": true
+  },
+  "ethical_standards": [
+    "transparency",
+    "privacy",
+    "fairness",
+    "safety",
+    "accountability",
+    "sustainability",
+    "reversibility"
+  ],
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    "file": "ark95x.log"
+  }
+}
