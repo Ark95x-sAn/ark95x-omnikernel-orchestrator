@@ -1,247 +1,201 @@
 #!/usr/bin/env python3
-"""ARK95X Omnikernel Orchestrator - Live Entry Point
-Bootstraps all core systems and runs the full autonomous engine.
-
-Usage:
-    python main.py                  # Run with defaults
-    python main.py --config cfg.json # Run with custom config
-    python main.py --api             # Run with FastAPI server
+"""ARK95X OmniKernel Orchestrator - Main Entry Point
+Full-scale self-learning sovereign AI system with ethical crew agents,
+hybrid routing, MCP integration, and autonomous reflection.
 """
+
 import asyncio
-import signal
-import sys
-import os
 import logging
-import argparse
+import os
+import sys
+import json
+from datetime import datetime
 from pathlib import Path
 
-# Ensure src is on path
-sys.path.insert(0, str(Path(__file__).parent))
+# ── Core imports ──────────────────────────────────────────────────────────────
+try:
+    from src.core.sovereign_reflection_engine import SovereignReflectionEngine
+except ImportError:
+    SovereignReflectionEngine = None
 
-from dotenv import load_dotenv
-load_dotenv()
+try:
+    from src.core.hybrid_router import HybridRouter
+except ImportError:
+    HybridRouter = None
 
-from src.core.config import ConfigManager
-from src.core.orchestrator import (
-    OrchestratorEngine, AgentDescriptor, TaskEnvelope, Priority
+try:
+    from src.agents.ethical_crew_agents import EthicalCrewAgents
+except ImportError:
+    EthicalCrewAgents = None
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler("ark95x.log", mode="a"),
+    ],
 )
-from src.core.self_healing import SelfHealingEngine, HealthCheck, FailureType
-from src.core.pipeline_manager import PipelineManager, PipelineStage
-from src.core.telemetry import TelemetryCollector
+log = logging.getLogger("ARK95X")
 
-logger = logging.getLogger("ark95x")
-
-
-def setup_logging(config: ConfigManager):
-    level = config.get("logging.level", "INFO")
-    fmt = config.get("logging.format", "%(asctime)s [%(name)s] %(levelname)s: %(message)s")
-    logging.basicConfig(level=getattr(logging, level), format=fmt)
-    log_file = config.get("logging.file")
-    if log_file:
-        fh = logging.FileHandler(log_file)
-        fh.setFormatter(logging.Formatter(fmt))
-        logging.getLogger().addHandler(fh)
+BANNER = r"""
+   ___    ____  _  ______  ____  _  __
+  / _ |  / __ \| |/ / __ \/ __/ | |/ /
+ / __ | / /_/ /   </_  __/_\ \  |   / 
+/_/ |_|/_/ \__/_/|_| /_/ /___/ /_/|_| 
+ OmniKernel Orchestrator  v2.0-sovereign
+"""
 
 
-class Ark95xRuntime:
-    """Main runtime that wires and runs all subsystems."""
+class ARK95XOrchestrator:
+    """Master orchestrator wiring all subsystems together."""
 
-    def __init__(self, config_path: str = None):
-        self.config = ConfigManager(config_path=config_path)
-        self.orchestrator = OrchestratorEngine({
-            "heal_interval": self.config.get("orchestrator.heal_interval", 30),
-            "scale_threshold": self.config.get("orchestrator.scale_threshold", 0.85),
-        })
-        self.healer = SelfHealingEngine({
-            "max_incidents": self.config.get("self_healing.max_incidents", 1000),
-        })
-        self.pipeline = PipelineManager({
-            "max_parallel": self.config.get("pipeline.max_parallel", 10),
-        })
-        self.telemetry = TelemetryCollector({
-            "retention_points": self.config.get("telemetry.retention_points", 10000),
-        })
-        self._running = False
+    def __init__(self, config_path: str = "config/settings.json"):
+        self.config_path = config_path
+        self.config = self._load_config()
+        self.reflection_engine = None
+        self.hybrid_router = None
+        self.crew_agents = None
+        self.session_id = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        self.memory: list = []
+        log.info(f"ARK95X Orchestrator initialized | session={self.session_id}")
 
-    def _register_default_agents(self):
-        agents = [
-            AgentDescriptor(agent_id="router", capabilities=["routing", "dispatch"]),
-            AgentDescriptor(agent_id="analyzer", capabilities=["analysis", "patterns"]),
-            AgentDescriptor(agent_id="executor", capabilities=["execution", "tasks"]),
-            AgentDescriptor(agent_id="monitor", capabilities=["monitoring", "alerts"]),
-        ]
-        for agent in agents:
-            self.orchestrator.register_agent(agent)
-            self.healer.add_circuit(agent.agent_id)
-        logger.info(f"Registered {len(agents)} default agents")
-
-    def _register_health_checks(self):
-        async def check_orchestrator():
-            status = self.orchestrator.get_status()
-            assert status["running"], "Orchestrator not running"
-
-        async def check_healer():
-            report = self.healer.get_report()
-            open_circuits = sum(
-                1 for c in report["circuits"].values()
-                if c["state"] == "open"
-            )
-            assert open_circuits == 0, f"{open_circuits} circuits open"
-
-        self.healer.register_health_check(
-            HealthCheck(name="orchestrator", check_fn=check_orchestrator, interval=15)
-        )
-        self.healer.register_health_check(
-            HealthCheck(name="circuits", check_fn=check_healer, interval=20)
-        )
-
-    def _register_recovery_strategies(self):
-        async def recover_timeout(incident, error):
-            logger.info(f"Timeout recovery: restarting component {incident.component}")
-            self.telemetry.increment("recovery.timeout")
-
-        async def recover_resource(incident, error):
-            logger.info(f"Resource recovery: freeing resources for {incident.component}")
-            self.telemetry.increment("recovery.resource")
-
-        self.healer.register_recovery(FailureType.TIMEOUT, recover_timeout)
-        self.healer.register_recovery(FailureType.RESOURCE, recover_resource)
-
-    def _setup_telemetry_thresholds(self):
-        self.telemetry.set_threshold("orchestrator.queue_size", warn=100, critical=500)
-        self.telemetry.set_threshold("orchestrator.error_rate", warn=0.1, critical=0.3)
-        self.telemetry.set_threshold("system.memory_pct", warn=80, critical=95)
-
-    async def _telemetry_loop(self):
-        import psutil
-        while self._running:
-            status = self.orchestrator.get_status()
-            self.telemetry.gauge("orchestrator.queue_size", status["queue_size"])
-            self.telemetry.gauge("orchestrator.completed", status["completed"])
-            self.telemetry.gauge("orchestrator.throughput_1m", status["throughput_1m"])
-            self.telemetry.gauge("system.memory_pct", psutil.virtual_memory().percent)
-            self.telemetry.gauge("system.cpu_pct", psutil.cpu_percent(interval=0))
-            await asyncio.sleep(10)
-
-    async def start(self):
-        logger.info("=" * 60)
-        logger.info("ARK95X OMNIKERNEL ORCHESTRATOR v1.0.0")
-        logger.info("Initializing all subsystems...")
-        logger.info("=" * 60)
-
-        self._running = True
-        self._register_default_agents()
-        self._register_health_checks()
-        self._register_recovery_strategies()
-        self._setup_telemetry_thresholds()
-
-        await self.orchestrator.start()
-        await self.healer.start()
-        asyncio.create_task(self._telemetry_loop())
-
-        logger.info("All systems ONLINE - Orchestrator fully operational")
-        logger.info(f"Agents: {len(self.orchestrator.agents)}")
-        logger.info(f"Circuits: {len(self.healer.circuits)}")
-        logger.info(f"Health checks: {len(self.healer.health_checks)}")
-
-    async def stop(self):
-        logger.info("Shutting down ARK95X...")
-        self._running = False
-        await self.orchestrator.stop()
-        await self.healer.stop()
-        dashboard = self.telemetry.get_dashboard()
-        logger.info(f"Final metrics: {dashboard['total_series']} series, {dashboard['total_points']} points")
-        logger.info("ARK95X shutdown complete")
-
-    def get_full_status(self):
+    def _load_config(self) -> dict:
+        path = Path(self.config_path)
+        if path.exists():
+            with open(path) as f:
+                return json.load(f)
         return {
-            "orchestrator": self.orchestrator.get_status(),
-            "healing": self.healer.get_report(),
-            "telemetry": self.telemetry.get_dashboard(),
-            "config": {"profile": self.config._active_profile},
+            "autonomy_level": 3,
+            "preferred_model": "ollama/llama3",
+            "fallback_models": ["openai/gpt-4o", "perplexity/sonar"],
+            "ethical_mode": True,
+            "self_learning": True,
+            "mcp_enabled": True,
+            "log_level": "INFO",
         }
 
+    async def boot(self):
+        """Boot all subsystems in order."""
+        log.info("=== ARK95X BOOT SEQUENCE INITIATED ===")
 
-def create_api(runtime: Ark95xRuntime):
-    """Create FastAPI server for the runtime."""
-    from fastapi import FastAPI
-    app = FastAPI(title="ARK95X Omnikernel", version="1.0.0")
+        # 1. Hybrid Router
+        if HybridRouter:
+            self.hybrid_router = HybridRouter(
+                preferred_model=self.config.get("preferred_model", "ollama/llama3"),
+                fallback_models=self.config.get("fallback_models", []),
+            )
+            log.info("[BOOT] HybridRouter online")
+        else:
+            log.warning("[BOOT] HybridRouter not available")
 
-    @app.on_event("startup")
-    async def startup():
-        await runtime.start()
+        # 2. Sovereign Reflection Engine
+        if SovereignReflectionEngine:
+            self.reflection_engine = SovereignReflectionEngine(
+                autonomy_level=self.config.get("autonomy_level", 3),
+                router=self.hybrid_router,
+            )
+            log.info("[BOOT] SovereignReflectionEngine online")
+        else:
+            log.warning("[BOOT] SovereignReflectionEngine not available")
 
-    @app.on_event("shutdown")
-    async def shutdown():
-        await runtime.stop()
+        # 3. Ethical Crew Agents
+        if EthicalCrewAgents:
+            self.crew_agents = EthicalCrewAgents(
+                router=self.hybrid_router,
+                ethical_mode=self.config.get("ethical_mode", True),
+            )
+            log.info("[BOOT] EthicalCrewAgents online")
+        else:
+            log.warning("[BOOT] EthicalCrewAgents not available")
 
-    @app.get("/status")
-    async def status():
-        return runtime.get_full_status()
+        log.info("=== BOOT SEQUENCE COMPLETE ===")
 
-    @app.get("/health")
-    async def health():
-        report = runtime.healer.get_report()
-        all_healthy = all(v["healthy"] for v in report["health"].values())
-        return {"healthy": all_healthy, "details": report}
+    async def reflect(self, prompt: str) -> str:
+        """Run sovereign reflection cycle on a prompt."""
+        if self.reflection_engine:
+            result = await self.reflection_engine.reflect(prompt)
+        elif self.hybrid_router:
+            result = await self.hybrid_router.route(prompt)
+        else:
+            result = f"[STUB] No engine available. Prompt received: {prompt}"
+        self.memory.append({"ts": datetime.utcnow().isoformat(), "prompt": prompt, "result": result})
+        return result
 
-    @app.get("/metrics")
-    async def metrics():
-        return runtime.telemetry.get_snapshot(window_seconds=300)
+    async def run_crew_task(self, task: str) -> str:
+        """Delegate a task to the ethical crew."""
+        if self.crew_agents:
+            return await self.crew_agents.execute(task)
+        return f"[STUB] Crew not available. Task: {task}"
 
-    @app.post("/task")
-    async def submit_task(payload: dict):
-        task = TaskEnvelope(
-            task_id=f"api_{int(__import__('time').time())}",
-            payload=payload,
-            priority=Priority.NORMAL,
+    async def self_improve(self):
+        """Trigger autonomous self-improvement cycle."""
+        if not self.config.get("self_learning", True):
+            log.info("Self-learning disabled in config.")
+            return
+        log.info("[SELF-IMPROVE] Starting autonomous improvement cycle...")
+        prompt = (
+            "Review the ARK95X system memory and recent tasks. "
+            "Identify patterns, gaps, and improvements. "
+            "Output a prioritized improvement plan."
         )
-        task_id = await runtime.orchestrator.submit_task(task)
-        return {"task_id": task_id, "status": "queued"}
+        result = await self.reflect(prompt)
+        log.info(f"[SELF-IMPROVE] Result: {result[:200]}...")
+        return result
 
-    return app
+    async def interactive_loop(self):
+        """Simple interactive REPL for direct orchestrator control."""
+        print(BANNER)
+        print(f"Session: {self.session_id}")
+        print("Commands: reflect <prompt> | crew <task> | improve | status | quit\n")
+        while True:
+            try:
+                line = input("ARK95X> ").strip()
+            except (EOFError, KeyboardInterrupt):
+                print("\nShutting down ARK95X...")
+                break
+            if not line:
+                continue
+            if line.lower() in ("quit", "exit", "q"):
+                print("Goodbye.")
+                break
+            elif line.lower() == "status":
+                self._print_status()
+            elif line.lower() == "improve":
+                result = await self.self_improve()
+                print(f"\nImprovement Plan:\n{result}\n")
+            elif line.lower().startswith("reflect "):
+                prompt = line[8:]
+                result = await self.reflect(prompt)
+                print(f"\nReflection:\n{result}\n")
+            elif line.lower().startswith("crew "):
+                task = line[5:]
+                result = await self.run_crew_task(task)
+                print(f"\nCrew Result:\n{result}\n")
+            else:
+                print("Unknown command. Try: reflect <prompt> | crew <task> | improve | status | quit")
+
+    def _print_status(self):
+        print(f"""
+=== ARK95X STATUS ===
+Session     : {self.session_id}
+Autonomy    : {self.config.get('autonomy_level', 'N/A')}
+Router      : {'ONLINE' if self.hybrid_router else 'OFFLINE'}
+Reflection  : {'ONLINE' if self.reflection_engine else 'OFFLINE'}
+Crew        : {'ONLINE' if self.crew_agents else 'OFFLINE'}
+Self-Learn  : {self.config.get('self_learning', False)}
+Ethical Mode: {self.config.get('ethical_mode', False)}
+Memory Items: {len(self.memory)}
+====================""")
 
 
-async def run_standalone(config_path: str = None):
-    runtime = Ark95xRuntime(config_path=config_path)
-    loop = asyncio.get_event_loop()
-    stop_event = asyncio.Event()
-
-    def handle_signal():
-        stop_event.set()
-
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, handle_signal)
-
-    await runtime.start()
-
-    logger.info("System running. Press Ctrl+C to stop.")
-    await stop_event.wait()
-    await runtime.stop()
-
-
-def main():
-    parser = argparse.ArgumentParser(description="ARK95X Omnikernel Orchestrator")
-    parser.add_argument("--config", type=str, help="Path to config JSON file")
-    parser.add_argument("--api", action="store_true", help="Run with FastAPI server")
-    parser.add_argument("--host", type=str, default="0.0.0.0", help="API host")
-    parser.add_argument("--port", type=int, default=8000, help="API port")
-    args = parser.parse_args()
-
-    if args.api:
-        import uvicorn
-        runtime = Ark95xRuntime(config_path=args.config)
-        setup_logging(runtime.config)
-        app = create_api(runtime)
-        uvicorn.run(app, host=args.host, port=args.port)
-    else:
-        runtime = Ark95xRuntime(config_path=args.config)
-        setup_logging(runtime.config)
-        try:
-            asyncio.run(run_standalone(config_path=args.config))
-        except KeyboardInterrupt:
-            logger.info("Interrupted")
+async def main():
+    orchestrator = ARK95XOrchestrator()
+    await orchestrator.boot()
+    await orchestrator.interactive_loop()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
+            
