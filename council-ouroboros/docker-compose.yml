@@ -1,0 +1,55 @@
+# council-ouroboros stack — local dev
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ouroboros
+      POSTGRES_PASSWORD: ouroboros
+      POSTGRES_DB: ouroboros
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ouroboros"]
+      interval: 10s
+      retries: 5
+
+  chroma:
+    image: chromadb/chroma:latest
+    ports: ["8000:8000"]
+    volumes: ["chromadata:/chroma/.chroma"]
+
+  ollama:
+    image: ollama/ollama:latest
+    ports: ["11434:11434"]
+    volumes: ["ollamadata:/root/.ollama"]
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports: ["9090:9090"]
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  grafana:
+    image: grafana/grafana:latest
+    ports: ["3000:3000"]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ouroboros
+    volumes: ["grafanadata:/var/lib/grafana"]
+
+  council-ouroboros:
+    build: .
+    env_file: .env
+    depends_on:
+      postgres: {condition: service_healthy}
+      chroma:   {condition: service_started}
+      ollama:   {condition: service_started}
+    command: python loop.py
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  chromadata:
+  ollamadata:
+  grafanadata:
