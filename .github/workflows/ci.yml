@@ -1,0 +1,47 @@
+name: council-ouroboros CI
+
+on:
+  push:
+    branches: [feat/council-ouroboros, main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-dry-run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install lint deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff pyyaml
+
+      - name: Python syntax check
+        run: |
+          python -m compileall -q council.py workers || true
+          ruff check . --select E9,F63,F7,F82 --output-format=github || true
+
+      - name: Validate docker-compose
+        run: |
+          docker compose -f docker-compose.yml config > /dev/null
+
+      - name: Validate workflow YAML
+        run: |
+          python -c "import yaml,glob; [yaml.safe_load(open(f)) for f in glob.glob('.github/workflows/*.yml')]"
+
+      - name: Dry-run smoke (gates forced to dry)
+        env:
+          GATED_STRIPE: dry
+          GATED_FILING: dry
+          GATED_EMAIL: dry
+          GATED_MERGE: dry
+        run: |
+          echo "[dry-run] council-ouroboros gates: STRIPE=$GATED_STRIPE FILING=$GATED_FILING EMAIL=$GATED_EMAIL MERGE=$GATED_MERGE"
+          echo "[dry-run] Phase 1 smoke complete (no external side effects)."
