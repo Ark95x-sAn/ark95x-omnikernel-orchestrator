@@ -25,6 +25,17 @@ try:
 except Exception:
     _sensing = None
 
+try:
+    from src.telemetry.mindstate import MindStateEngine
+    from src.telemetry.aura_engine import AuraEngine
+    from src.telemetry.roi_engine import ROIEngine
+    _mindstate = MindStateEngine()
+    _aura      = AuraEngine()
+    _roi       = ROIEngine()
+except Exception as _te:
+    _mindstate = _aura = _roi = None
+    logging.getLogger("ark95x.platform").warning(f"Telemetry unavailable: {_te}")
+
 logger = logging.getLogger("ark95x.platform")
 
 # ── App init ───────────────────────────────────────────────────────────────────
@@ -84,6 +95,7 @@ async def start_background():
     feed.bootstrap()
     asyncio.create_task(_pulse_loop())
     asyncio.create_task(_sensing_loop())
+    asyncio.create_task(_telemetry_loop())
 
 
 async def _pulse_loop():
@@ -99,6 +111,32 @@ async def _pulse_loop():
             })
         except Exception as e:
             logger.debug(f"Pulse error: {e}")
+
+
+async def _telemetry_loop():
+    """Advance telemetry engines every 5 seconds and broadcast mindstate."""
+    while True:
+        await asyncio.sleep(5)
+        if not (_mindstate and _aura and _roi):
+            continue
+        try:
+            state, vec = _mindstate.sample()
+            aura_snap  = _aura.sample()
+            await manager.broadcast({
+                "event": "telemetry_tick",
+                "payload": {
+                    "mindstate":    state.value,
+                    "aura_pulse":   round(aura_snap.pulse_rate_hz, 3),
+                    "aura_intensity": round(aura_snap.intensity, 3),
+                    "alignment":    round(aura_snap.alignment_score, 3),
+                    "trauma_index": round(aura_snap.trauma_index, 3),
+                    "stress":       round(vec.stress, 3),
+                    "flow":         round(vec.flow, 3),
+                },
+                "ts": time.time(),
+            })
+        except Exception as e:
+            logger.debug(f"Telemetry loop error: {e}")
 
 
 async def _sensing_loop():
@@ -272,6 +310,61 @@ async def council_status():
         "last_cycle": round(time.time() - random.randint(30, 300)),
         "cycles_completed": 47,
     }
+
+
+# ── Telemetry routes ──────────────────────────────────────────────────────────
+
+@app.get("/api/telemetry/mindstate")
+async def tel_mindstate():
+    if not _mindstate:
+        return {"error": "telemetry offline"}
+    _mindstate.sample()
+    return {
+        "current":     _mindstate.get_state(),
+        "history":     _mindstate.get_history(n=80),
+        "transitions": _mindstate.get_transitions(),
+    }
+
+
+@app.get("/api/telemetry/aura")
+async def tel_aura():
+    if not _aura:
+        return {"error": "aura offline"}
+    _aura.sample()
+    return {
+        "snapshot":  _aura.get_snapshot(),
+        "series":    _aura.get_pulse_series(n=80),
+        "trauma":    _aura.get_trauma_log(),
+        "alignment": _aura.get_alignment_matrix(),
+    }
+
+
+@app.get("/api/telemetry/roi")
+async def tel_roi():
+    if not _roi:
+        return {"error": "roi offline"}
+    return {
+        "snapshot": _roi.snapshot(),
+        "ledger":   _roi.get_ledger(n=28),
+    }
+
+
+class TraumaRequest(BaseModel):
+    description: str
+    severity: float = 0.5
+
+
+@app.post("/api/telemetry/trauma")
+async def inject_trauma(req: TraumaRequest):
+    if not _aura:
+        return {"error": "aura offline"}
+    ev = _aura.inject_trauma(req.description, req.severity)
+    await manager.broadcast({
+        "event": "trauma",
+        "payload": {"id": ev.event_id, "severity": ev.severity, "desc": ev.description},
+        "ts": time.time(),
+    })
+    return {"event_id": ev.event_id, "severity": ev.severity}
 
 
 # ── WebSocket ──────────────────────────────────────────────────────────────────

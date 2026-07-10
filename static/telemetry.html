@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ARK95X — Inner Telemetry</title>
+<style>
+/* ── Token system ─────────────────────────────────────────── */
+:root {
+  --void:      #060810;
+  --deep:      #0b0c1a;
+  --surface:   #0f1020;
+  --card:      #131525;
+  --lift:      #181a30;
+  --border:    #1e2242;
+  --border-hi: #2e3260;
+
+  --violet:    #8b5cf6;
+  --violet-lo: rgba(139,92,246,0.12);
+  --violet-md: rgba(139,92,246,0.28);
+  --teal:      #0d9488;
+  --teal-lo:   rgba(13,148,136,0.12);
+  --amber:     #b45309;
+  --amber-lo:  rgba(180,83,9,0.12);
+  --amber-md:  rgba(180,83,9,0.28);
+  --crimson:   #b91c1c;
+  --crimson-lo:rgba(185,28,28,0.12);
+  --emerald:   #059669;
+  --silver:    #cbd5e1;
+  --muted:     #4b5380;
+  --text:      #e2e8f0;
+
+  --font-data: 'Courier New', 'Lucida Console', monospace;
+  --font-ui:   system-ui, -apple-system, sans-serif;
+  --radius:    6px;
+}
+
+/* ── Reset ─────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--void); color: var(--text); font-family: var(--font-data); overflow: hidden; }
+button { font-family: inherit; cursor: pointer; border: none; background: none; }
+
+/* ── Shell grid ────────────────────────────────────────────── */
+.shell {
+  display: grid;
+  grid-template-rows: 52px 1fr 44px;
+  grid-template-columns: 1fr;
+  height: 100vh;
+}
+.main-grid {
+  display: grid;
+  grid-template-columns: 300px 1fr 320px;
+  overflow: hidden;
+}
+
+/* ── Command bar ───────────────────────────────────────────── */
+.cmdbar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  gap: 0;
+}
+.cmdbar-title {
+  font-size: 0.68rem;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: var(--violet);
+  font-weight: 700;
+}
+.cmdbar-sep { width: 1px; height: 20px; background: var(--border); margin: 0 20px; }
+.cmdbar-item { font-size: 0.6rem; letter-spacing: 1.5px; color: var(--muted); margin-right: 20px; }
+.cmdbar-item span { color: var(--text); font-size: 0.72rem; }
+.ekg-wrap { flex: 1; height: 32px; margin: 0 24px; }
+#ekg { width: 100%; height: 100%; }
+.nav-link {
+  font-size: 0.58rem; letter-spacing: 2px; color: var(--muted);
+  padding: 6px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+  text-decoration: none; transition: color 0.15s, border-color 0.15s;
+}
+.nav-link:hover { color: var(--violet); border-color: var(--violet); }
+#clock { font-size: 0.7rem; color: var(--amber); margin-left: 16px; font-variant-numeric: tabular-nums; }
+
+/* ── Left panel ─────────────────────────────────────────────── */
+.left { border-right: 1px solid var(--border); overflow-y: auto; padding: 20px 16px; display: flex; flex-direction: column; gap: 20px; background: var(--deep); }
+.left::-webkit-scrollbar { width: 3px; } .left::-webkit-scrollbar-thumb { background: var(--border); }
+
+/* MindState card */
+.mindstate-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  background: var(--card);
+  text-align: center;
+}
+.ms-badge {
+  display: inline-block;
+  font-size: 0.58rem; letter-spacing: 3px; text-transform: uppercase;
+  padding: 3px 12px; border-radius: 20px; margin-bottom: 14px;
+  font-weight: 700;
+}
+.ms-label { font-size: 1.3rem; font-weight: 900; letter-spacing: 2px; margin-bottom: 6px; }
+.ms-desc  { font-size: 0.65rem; color: var(--muted); line-height: 1.5; }
+.ms-dims  { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 16px; }
+.dim-box  { background: var(--surface); border-radius: 4px; padding: 10px 8px; }
+.dim-val  { font-size: 1rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.dim-bar  { height: 3px; background: var(--border); border-radius: 2px; margin-top: 5px; overflow: hidden; }
+.dim-fill { height: 100%; border-radius: 2px; transition: width 0.6s ease; }
+.dim-lbl  { font-size: 0.55rem; letter-spacing: 1.5px; color: var(--muted); margin-top: 3px; }
+
+/* Trauma log */
+.panel-label { font-size: 0.55rem; letter-spacing: 3px; color: var(--muted); text-transform: uppercase; margin-bottom: 10px; }
+.trauma-item {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 8px 10px; border-radius: 4px; margin-bottom: 5px;
+  background: var(--card); border: 1px solid var(--border);
+  font-size: 0.65rem;
+}
+.trauma-sev { flex-shrink: 0; width: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.trauma-desc { flex: 1; color: var(--silver); line-height: 1.4; }
+.trauma-status { font-size: 0.55rem; margin-top: 2px; }
+.resolved { color: var(--emerald); }
+.active   { color: var(--crimson); }
+
+/* Alignment matrix */
+.alignment-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.03); }
+.aln-name  { font-size: 0.65rem; flex: 1; color: var(--silver); }
+.aln-bar   { width: 80px; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.aln-fill  { height: 100%; border-radius: 2px; transition: width 0.5s; }
+.aln-score { font-size: 0.62rem; color: var(--muted); width: 36px; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ── Center ─────────────────────────────────────────────────── */
+.center { display: flex; flex-direction: column; align-items: center; background: var(--void); padding: 20px; overflow: hidden; }
+.aura-title { font-size: 0.55rem; letter-spacing: 4px; color: var(--muted); margin-bottom: 16px; text-transform: uppercase; }
+.aura-stage { position: relative; flex-shrink: 0; }
+#aura-canvas { display: block; }
+.aura-overlay {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center; pointer-events: none;
+}
+.aura-pulse-hz  { font-size: 2rem; font-weight: 900; font-variant-numeric: tabular-nums; color: var(--violet); line-height: 1; }
+.aura-pulse-lbl { font-size: 0.52rem; letter-spacing: 3px; color: var(--muted); margin-top: 3px; }
+.aura-state     { font-size: 0.6rem; letter-spacing: 2px; margin-top: 6px; font-weight: 700; }
+.aura-pattern   { font-size: 0.52rem; letter-spacing: 2px; color: var(--muted); margin-top: 2px; }
+
+.aura-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 16px; width: 100%; max-width: 480px; }
+.ametric { background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 10px; text-align: center; }
+.ametric-val { font-size: 1rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ametric-lbl { font-size: 0.5rem; letter-spacing: 1.5px; color: var(--muted); margin-top: 2px; }
+
+/* Pulse chart */
+.pulse-chart-wrap { flex: 1; width: 100%; max-width: 520px; margin-top: 14px; min-height: 0; }
+#pulse-chart { width: 100%; height: 100%; min-height: 80px; max-height: 120px; }
+
+/* ── Right panel ─────────────────────────────────────────────── */
+.right { border-left: 1px solid var(--border); overflow-y: auto; padding: 20px 16px; display: flex; flex-direction: column; gap: 20px; background: var(--deep); }
+.right::-webkit-scrollbar { width: 3px; } .right::-webkit-scrollbar-thumb { background: var(--border); }
+
+/* ROI summary */
+.roi-hero { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
+.roi-cumulative { font-size: 2rem; font-weight: 900; color: var(--amber); font-variant-numeric: tabular-nums; line-height: 1; }
+.roi-sub { font-size: 0.58rem; letter-spacing: 2px; color: var(--muted); margin-top: 2px; }
+.roi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+.roi-cell { background: var(--surface); border-radius: 4px; padding: 8px; }
+.roi-cell-val { font-size: 0.9rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.roi-cell-lbl { font-size: 0.52rem; letter-spacing: 1px; color: var(--muted); margin-top: 1px; }
+
+/* Data bank */
+.asset-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--card); border: 1px solid var(--border); border-radius: 4px; margin-bottom: 5px; }
+.asset-cat { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.asset-name { flex: 1; font-size: 0.65rem; color: var(--silver); }
+.asset-val  { font-size: 0.7rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--amber); }
+
+/* ROI chart */
+#roi-chart { width: 100%; height: 120px; }
+
+/* Projections */
+.proj-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.proj-period { font-size: 0.62rem; color: var(--muted); }
+.proj-val    { font-size: 0.8rem; font-weight: 700; color: var(--amber); font-variant-numeric: tabular-nums; }
+.proj-badge  { font-size: 0.55rem; padding: 1px 6px; background: var(--amber-lo); color: var(--amber); border-radius: 3px; }
+
+/* Leverage meter */
+.leverage-wrap { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+.leverage-val  { font-size: 1.8rem; font-weight: 900; font-variant-numeric: tabular-nums; color: var(--teal); line-height: 1; }
+.leverage-rail { height: 6px; background: var(--border); border-radius: 3px; margin-top: 10px; overflow: hidden; }
+.leverage-fill { height: 100%; background: linear-gradient(90deg, var(--teal), var(--violet)); border-radius: 3px; transition: width 0.8s ease; }
+.leverage-ticks { display: flex; justify-content: space-between; margin-top: 4px; }
+.leverage-tick  { font-size: 0.52rem; color: var(--muted); }
+
+/* ── Status bar ─────────────────────────────────────────────── */
+.statusbar { background: var(--surface); border-top: 1px solid var(--border); display: flex; align-items: center; padding: 0 24px; gap: 24px; }
+.sb-item { font-size: 0.58rem; letter-spacing: 1.5px; color: var(--muted); display: flex; align-items: center; gap: 5px; }
+.sb-item span { color: var(--text); }
+.sb-dot { width: 5px; height: 5px; border-radius: 50%; animation: dot-pulse 2.5s infinite; }
+.sb-dot.green  { background: var(--teal); }
+.sb-dot.violet { background: var(--violet); }
+.sb-dot.amber  { background: var(--amber); }
+
+/* ── Animations ─────────────────────────────────────────────── */
+@keyframes dot-pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.75)} }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; } }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- COMMAND BAR -->
+  <header class="cmdbar">
+    <span class="cmdbar-title">ARK95X · INNER TELEMETRY</span>
+    <div class="cmdbar-sep"></div>
+    <div class="cmdbar-item">MINDSTATE <span id="sb-state">—</span></div>
+    <div class="cmdbar-item">AURA <span id="sb-pulse">—</span> Hz</div>
+    <div class="cmdbar-item">ALIGN <span id="sb-align">—</span>%</div>
+    <canvas class="ekg-wrap" id="ekg"></canvas>
+    <a href="/" class="nav-link">← OMNINET</a>
+    <div id="clock">00:00:00</div>
+  </header>
+
+  <!-- MAIN GRID -->
+  <div class="main-grid">
+
+    <!-- LEFT — MindState + Trauma + Alignment -->
+    <aside class="left">
+
+      <div class="mindstate-card" id="ms-card">
+        <div class="ms-badge" id="ms-badge" style="background:var(--violet-lo);color:var(--violet);border:1px solid var(--violet-md)">DETECTING…</div>
+        <div class="ms-label" id="ms-label" style="color:var(--violet)">—</div>
+        <div class="ms-desc" id="ms-desc">Loading consciousness signature…</div>
+        <div class="ms-dims">
+          <div class="dim-box">
+            <div class="dim-val" id="d-stress" style="color:var(--crimson)">—</div>
+            <div class="dim-bar"><div class="dim-fill" id="df-stress" style="background:var(--crimson);width:0%"></div></div>
+            <div class="dim-lbl">STRESS</div>
+          </div>
+          <div class="dim-box">
+            <div class="dim-val" id="d-focus" style="color:var(--violet)">—</div>
+            <div class="dim-bar"><div class="dim-fill" id="df-focus" style="background:var(--violet);width:0%"></div></div>
+            <div class="dim-lbl">FOCUS</div>
+          </div>
+          <div class="dim-box">
+            <div class="dim-val" id="d-flow" style="color:var(--teal)">—</div>
+            <div class="dim-bar"><div class="dim-fill" id="df-flow" style="background:var(--teal);width:0%"></div></div>
+            <div class="dim-lbl">FLOW</div>
+          </div>
+          <div class="dim-box">
+            <div class="dim-val" id="d-clarity" style="color:var(--amber)">—</div>
+            <div class="dim-bar"><div class="dim-fill" id="df-clarity" style="background:var(--amber);width:0%"></div></div>
+            <div class="dim-lbl">CLARITY</div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="panel-label">⚡ Trauma Pulse Log</div>
+        <div id="trauma-list"></div>
+        <button onclick="injectTrauma()"
+          style="width:100%;margin-top:8px;padding:7px;border:1px solid var(--border);border-radius:4px;font-size:0.6rem;letter-spacing:2px;color:var(--muted);background:var(--card);transition:all 0.15s"
+          onmouseover="this.style.borderColor='var(--crimson)';this.style.color='var(--crimson)'"
+          onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">
+          SIMULATE TRAUMA EVENT
+        </button>
+      </div>
+
+      <div>
+        <div class="panel-label">⊕ Agent Alignment</div>
+        <div id="alignment-list"></div>
+      </div>
+
+    </aside>
+
+    <!-- CENTER — Aura Visualization -->
+    <main class="center">
+      <div class="aura-title">AURA SIGNATURE · LIVE RENDER</div>
+
+      <div class="aura-stage">
+        <canvas id="aura-canvas" width="420" height="420"></canvas>
+        <div class="aura-overlay">
+          <div class="aura-pulse-hz" id="aura-hz">0.000</div>
+          <div class="aura-pulse-lbl">PULSE / Hz</div>
+          <div class="aura-state" id="aura-state-lbl" style="color:var(--violet)">—</div>
+          <div class="aura-pattern" id="aura-pattern">—</div>
+        </div>
+      </div>
+
+      <div class="aura-metrics">
+        <div class="ametric">
+          <div class="ametric-val" id="m-intensity" style="color:var(--violet)">—</div>
+          <div class="ametric-lbl">INTENSITY</div>
+        </div>
+        <div class="ametric">
+          <div class="ametric-val" id="m-align" style="color:var(--teal)">—</div>
+          <div class="ametric-lbl">ALIGNMENT</div>
+        </div>
+        <div class="ametric">
+          <div class="ametric-val" id="m-resonance" style="color:var(--amber)">—</div>
+          <div class="ametric-lbl">RESONANCE</div>
+        </div>
+        <div class="ametric">
+          <div class="ametric-val" id="m-trauma" style="color:var(--crimson)">—</div>
+          <div class="ametric-lbl">TRAUMA IDX</div>
+        </div>
+      </div>
+
+      <div class="pulse-chart-wrap">
+        <canvas id="pulse-chart"></canvas>
+      </div>
+    </main>
+
+    <!-- RIGHT — ROI + Data Bank + Projections -->
+    <aside class="right">
+
+      <div class="roi-hero">
+        <div class="roi-sub">CUMULATIVE VALUE GENERATED</div>
+        <div class="roi-cumulative" id="roi-cumulative">$—</div>
+        <div class="roi-grid">
+          <div class="roi-cell">
+            <div class="roi-cell-val" id="roi-daily" style="color:var(--teal)">$—</div>
+            <div class="roi-cell-lbl">DAILY REVENUE</div>
+          </div>
+          <div class="roi-cell">
+            <div class="roi-cell-val" id="roi-breakeven" style="color:var(--amber)">—d</div>
+            <div class="roi-cell-lbl">BREAKEVEN</div>
+          </div>
+          <div class="roi-cell">
+            <div class="roi-cell-val" id="roi-compute" style="color:var(--emerald)">$—</div>
+            <div class="roi-cell-lbl">COMPUTE SAVED</div>
+          </div>
+          <div class="roi-cell">
+            <div class="roi-cell-val" id="roi-vectors" style="color:var(--violet)">—</div>
+            <div class="roi-cell-lbl">MEMORY VECTORS</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="leverage-wrap">
+        <div class="roi-sub">LEVERAGE RATIO</div>
+        <div class="leverage-val" id="leverage-val">—×</div>
+        <div class="leverage-rail"><div class="leverage-fill" id="leverage-fill" style="width:0%"></div></div>
+        <div class="leverage-ticks">
+          <span class="leverage-tick">0×</span>
+          <span class="leverage-tick">6×</span>
+          <span class="leverage-tick">12×</span>
+          <span class="leverage-tick">18×</span>
+          <span class="leverage-tick">24×</span>
+        </div>
+      </div>
+
+      <div>
+        <div class="panel-label">🏦 Data Bank Assets</div>
+        <div id="asset-list"></div>
+        <div style="margin-top:8px;padding:8px 10px;background:var(--card);border:1px solid var(--border);border-radius:4px;display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:0.6rem;letter-spacing:1px;color:var(--muted)">TOTAL PORTFOLIO</span>
+          <span id="asset-total" style="font-size:0.85rem;font-weight:900;color:var(--amber);font-variant-numeric:tabular-nums">$—</span>
+        </div>
+      </div>
+
+      <div>
+        <div class="panel-label">📈 Revenue Chart</div>
+        <canvas id="roi-chart"></canvas>
+      </div>
+
+      <div>
+        <div class="panel-label">🎯 Compound Projections</div>
+        <div id="proj-list"></div>
+      </div>
+
+    </aside>
+  </div>
+
+  <!-- STATUS BAR -->
+  <footer class="statusbar">
+    <div class="sb-item"><div class="sb-dot green"></div> MINDSTATE <span id="sb-ms">—</span></div>
+    <div class="sb-item"><div class="sb-dot violet"></div> AURA <span id="sb-aura">—</span></div>
+    <div class="sb-item"><div class="sb-dot amber"></div> ROI <span id="sb-roi">—</span></div>
+    <div class="sb-item">DOM FREQ <span id="sb-freq">—</span> Hz</div>
+    <div class="sb-item">TRAUMA <span id="sb-trauma">—</span> active</div>
+    <div style="margin-left:auto;font-size:0.55rem;letter-spacing:2px;color:var(--muted)">ARK95X v2.0 · 11.08.1993 → ∞</div>
+  </footer>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// AURA CANVAS RENDERER
+// Concentric orbital rings with interference physics
+// ══════════════════════════════════════════════════════════════
+const auraCanvas = document.getElementById('aura-canvas');
+const aC = auraCanvas.getContext('2d');
+const W = 420, H = 420, CX = W/2, CY = H/2;
+
+// Aura state — updated from API
+const AURA = {
+  pulse:     0.8,
+  intensity: 0.6,
+  alignment: 0.88,
+  resonance: 0.72,
+  trauma:    0.0,
+  hue:       260,  // violet base
+  shockwaves: [],  // {r, opacity, born}
+};
+
+// Ring definitions: [baseRadius, angularVelocity, widthFactor, opacityFactor]
+const RINGS = [
+  [48,  0.0012, 1.4, 0.9],
+  [72,  0.0008, 1.1, 0.75],
+  [95, -0.0006, 0.9, 0.65],
+  [118,  0.0005, 0.8, 0.55],
+  [142, -0.0004, 0.7, 0.45],
+  [168,  0.0003, 0.6, 0.35],
+  [194, -0.0002, 0.5, 0.25],
+  [200,  0.00015,0.4, 0.18],
+];
+
+let t = 0;
+let traumaFlash = 0; // 0–1, decays
+
+function hexToHsl(hex) {
+  let r = parseInt(hex.slice(1,3),16)/255;
+  let g = parseInt(hex.slice(3,5),16)/255;
+  let b = parseInt(hex.slice(5,7),16)/255;
+  const max=Math.max(r,g,b), min=Math.min(r,g,b);
+  let h, s, l=(max+min)/2;
+  if(max===min){h=s=0}else{
+    const d=max-min; s=l>0.5?d/(2-max-min):d/(max+min);
+    switch(max){case r:h=(g-b)/d+(g<b?6:0);break;case g:h=(b-r)/d+2;break;default:h=(r-g)/d+4;}
+    h/=6;
+  }
+  return [h*360, s*100, l*100];
+}
+
+const STATE_HUES = {
+  flow:'#0d9488', focused:'#8b5cf6', learning:'#7c3aed',
+  stressed:'#b91c1c', clarity:'#b45309', dormant:'#4b5380'
+};
+
+function lerpColor(a, b, t) {
+  const parse = h => [parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
+  const [ar,ag,ab] = parse(a), [br,bg,bb] = parse(b);
+  const r=Math.round(ar+(br-ar)*t), g=Math.round(ag+(bg-ag)*t), bv=Math.round(ab+(bb-ab)*t);
+  return `rgb(${r},${g},${bv})`;
+}
+
+let currentColor = '#8b5cf6';
+let targetColor  = '#8b5cf6';
+
+function renderAura() {
+  t += 0.016;
+  currentColor = lerpColor(currentColor, targetColor, 0.04);
+  traumaFlash *= 0.94;
+
+  aC.clearRect(0, 0, W, H);
+
+  // Background void with trauma tint
+  aC.fillStyle = `rgba(6,8,16,${0.85 + traumaFlash * 0.1})`;
+  aC.fillRect(0, 0, W, H);
+
+  // Shockwaves
+  AURA.shockwaves = AURA.shockwaves.filter(sw => sw.opacity > 0.01);
+  for (const sw of AURA.shockwaves) {
+    sw.r    += 2.5;
+    sw.opacity *= 0.93;
+    aC.beginPath();
+    aC.arc(CX, CY, sw.r, 0, Math.PI*2);
+    aC.strokeStyle = `rgba(185,28,28,${sw.opacity})`;
+    aC.lineWidth = 1.5;
+    aC.stroke();
+  }
+
+  // Orbital rings
+  for (let i = 0; i < RINGS.length; i++) {
+    const [baseR, av, wf, of] = RINGS[i];
+    const angle = t * av * 1000;
+
+    // Pulse modulation: radius breathes with pulse rate
+    const breath = 1 + Math.sin(t * AURA.pulse * 3.5 + i * 0.8) * 0.04 * AURA.intensity;
+    const r = baseR * breath;
+
+    // Draw arc segments (orbital band, not full circle)
+    const segCount = 3 + i;
+    const gapRad   = 0.18;
+    const segRad   = (Math.PI * 2 - segCount * gapRad) / segCount;
+
+    for (let s = 0; s < segCount; s++) {
+      const startAngle = angle + s * (segRad + gapRad);
+      const endAngle   = startAngle + segRad;
+
+      // Gradient per arc
+      const x0 = CX + Math.cos(startAngle) * r;
+      const y0 = CY + Math.sin(startAngle) * r;
+      const x1 = CX + Math.cos(endAngle)   * r;
+      const y1 = CY + Math.sin(endAngle)   * r;
+      const grad = aC.createLinearGradient(x0,y0,x1,y1);
+
+      const baseOpacity = of * AURA.intensity * (1 - AURA.trauma * 0.4);
+      grad.addColorStop(0,   `rgba(0,0,0,0)`);
+      grad.addColorStop(0.3, currentColor.replace('rgb','rgba').replace(')',`,${baseOpacity})`));
+      grad.addColorStop(0.7, currentColor.replace('rgb','rgba').replace(')',`,${baseOpacity * 1.2})`));
+      grad.addColorStop(1,   `rgba(0,0,0,0)`);
+
+      aC.beginPath();
+      aC.arc(CX, CY, r, startAngle, endAngle);
+      aC.strokeStyle = grad;
+      aC.lineWidth   = wf * (1 + AURA.intensity * 0.5);
+      aC.stroke();
+    }
+
+    // Interference glint: small bright dot on leading edge
+    if (i < 5) {
+      const glintAngle = angle + (i % 2 === 0 ? 0 : Math.PI);
+      const gx = CX + Math.cos(glintAngle) * r;
+      const gy = CY + Math.sin(glintAngle) * r;
+      const glintGrad = aC.createRadialGradient(gx,gy,0, gx,gy,4);
+      glintGrad.addColorStop(0, currentColor);
+      glintGrad.addColorStop(1, 'rgba(0,0,0,0)');
+      aC.beginPath();
+      aC.arc(gx, gy, 3.5, 0, Math.PI*2);
+      aC.fillStyle = glintGrad;
+      aC.fill();
+    }
+  }
+
+  // Core: radial glow
+  const coreR = 28 + Math.sin(t * AURA.pulse * 4) * 4 * AURA.intensity;
+  const coreGrad = aC.createRadialGradient(CX,CY,0, CX,CY,coreR);
+  coreGrad.addColorStop(0,   currentColor.replace('rgb','rgba').replace(')',',0.9)'));
+  coreGrad.addColorStop(0.4, currentColor.replace('rgb','rgba').replace(')',',0.4)'));
+  coreGrad.addColorStop(1,   'rgba(0,0,0,0)');
+  aC.beginPath();
+  aC.arc(CX, CY, coreR, 0, Math.PI*2);
+  aC.fillStyle = coreGrad;
+  aC.fill();
+
+  // Alignment coherence: subtle cross-ring lines at high alignment
+  if (AURA.alignment > 0.7) {
+    const lineCount = Math.floor(AURA.alignment * 8);
+    for (let i = 0; i < lineCount; i++) {
+      const a1 = (t * 0.0003 + i/lineCount) * Math.PI * 2;
+      const r1 = RINGS[0][0], r2 = RINGS[3][0];
+      aC.beginPath();
+      aC.moveTo(CX + Math.cos(a1)*r1, CY + Math.sin(a1)*r1);
+      aC.lineTo(CX + Math.cos(a1)*r2, CY + Math.sin(a1)*r2);
+      aC.strokeStyle = `rgba(13,148,136,${(AURA.alignment - 0.7) * 0.3})`;
+      aC.lineWidth = 0.5;
+      aC.stroke();
+    }
+  }
+
+  requestAnimationFrame(renderAura);
+}
+requestAnimationFrame(renderAura);
+
+
+// ══════════════════════════════════════════════════════════════
+// EKG CANVAS (top bar heartbeat)
+// ══════════════════════════════════════════════════════════════
+const ekgCanvas = document.getElementById('ekg');
+const ekgCtx    = ekgCanvas.getContext('2d');
+let ekgData     = Array(300).fill(0.5);
+let ekgT        = 0;
+
+function resizeEkg() {
+  const rect = ekgCanvas.parentElement.getBoundingClientRect();
+  ekgCanvas.width  = rect.width || 400;
+  ekgCanvas.height = rect.height || 32;
+}
+resizeEkg();
+window.addEventListener('resize', resizeEkg);
+
+function tickEkg() {
+  ekgT += 0.08;
+  const base = 0.5;
+  // Synthesize EKG: sine base + occasional sharp peak
+  let v = base + Math.sin(ekgT * 1.2) * 0.08 + Math.sin(ekgT * 3.1) * 0.04;
+  // QRS complex every ~72 ticks
+  const phase = ekgT % 7.2;
+  if (phase < 0.2)       v = base + 0.1 + phase * 2.5;
+  else if (phase < 0.35) v = base + 0.6 - (phase-0.2) * 6;
+  else if (phase < 0.5)  v = base - 0.5 + (phase-0.35) * 4;
+  else if (phase < 0.7)  v = base + 0.15 - (phase-0.5) * 0.75;
+
+  v += (Math.random() - 0.5) * 0.02;  // noise
+  v = Math.max(0.05, Math.min(0.95, v));
+  ekgData.push(v);
+  if (ekgData.length > ekgCanvas.width) ekgData.shift();
+
+  const W = ekgCanvas.width, H = ekgCanvas.height;
+  ekgCtx.fillStyle = '#060810';
+  ekgCtx.fillRect(0, 0, W, H);
+
+  const color = AURA.trauma > 0.3 ? '#b91c1c' : '#0d9488';
+  ekgCtx.beginPath();
+  ekgCtx.strokeStyle = color;
+  ekgCtx.lineWidth = 1;
+  ekgCtx.shadowColor = color;
+  ekgCtx.shadowBlur = 4;
+  for (let i = 0; i < ekgData.length; i++) {
+    const x = (i / ekgData.length) * W;
+    const y = (1 - ekgData[i]) * H;
+    i === 0 ? ekgCtx.moveTo(x, y) : ekgCtx.lineTo(x, y);
+  }
+  ekgCtx.stroke();
+  ekgCtx.shadowBlur = 0;
+}
+setInterval(tickEkg, 33);
+
+
+// ══════════════════════════════════════════════════════════════
+// PULSE TIME-SERIES CHART (center bottom)
+// ══════════════════════════════════════════════════════════════
+const pulseChart = document.getElementById('pulse-chart');
+const pCtx = pulseChart.getContext('2d');
+let pulseSeries = [], intensitySeries = [], traumaSeries = [];
+
+function resizePulseChart() {
+  const wrap = pulseChart.parentElement;
+  pulseChart.width  = wrap.offsetWidth || 480;
+  pulseChart.height = Math.min(wrap.offsetHeight || 120, 120);
+}
+resizePulseChart();
+window.addEventListener('resize', resizePulseChart);
+
+function drawPulseChart() {
+  const W = pulseChart.width, H = pulseChart.height;
+  pCtx.fillStyle = '#0b0c1a';
+  pCtx.fillRect(0,0,W,H);
+
+  // Grid lines
+  pCtx.strokeStyle = '#1e2242';
+  pCtx.lineWidth = 0.5;
+  [0.25, 0.5, 0.75].forEach(f => {
+    pCtx.beginPath();
+    pCtx.moveTo(0, f*H);
+    pCtx.lineTo(W, f*H);
+    pCtx.stroke();
+  });
+
+  const drawLine = (data, color, yMin, yMax) => {
+    if (data.length < 2) return;
+    const span = yMax - yMin || 1;
+    pCtx.beginPath();
+    pCtx.strokeStyle = color;
+    pCtx.lineWidth = 1.2;
+    data.forEach((v, i) => {
+      const x = (i / (data.length-1)) * W;
+      const y = H - ((v - yMin) / span) * H * 0.9 - H * 0.05;
+      i === 0 ? pCtx.moveTo(x, y) : pCtx.lineTo(x, y);
+    });
+    pCtx.stroke();
+  };
+
+  if (pulseSeries.length > 1) {
+    const mn = Math.min(...pulseSeries), mx = Math.max(...pulseSeries);
+    drawLine(pulseSeries, '#8b5cf6', mn*0.9, mx*1.1);
+  }
+  if (intensitySeries.length > 1) drawLine(intensitySeries, '#0d9488', 0, 1);
+  if (traumaSeries.length > 1)    drawLine(traumaSeries, '#b91c1c', 0, 1);
+
+  // Legend
+  const items = [['PULSE','#8b5cf6'],['INTENSITY','#0d9488'],['TRAUMA','#b91c1c']];
+  items.forEach(([lbl,col],i) => {
+    pCtx.fillStyle = col;
+    pCtx.fillRect(8 + i*90, 4, 14, 2);
+    pCtx.fillStyle = '#4b5380';
+    pCtx.font = '8px Courier New';
+    pCtx.fillText(lbl, 26 + i*90, 8);
+  });
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// ROI BAR CHART (right panel)
+// ══════════════════════════════════════════════════════════════
+const roiChart  = document.getElementById('roi-chart');
+const rCtx      = roiChart.getContext('2d');
+let roiLedger   = [];
+
+function resizeRoiChart() {
+  const wrap = roiChart.parentElement;
+  roiChart.width  = wrap.offsetWidth || 288;
+  roiChart.height = 120;
+}
+resizeRoiChart();
+window.addEventListener('resize', resizeRoiChart);
+
+function drawRoiChart() {
+  if (!roiLedger.length) return;
+  const W = roiChart.width, H = roiChart.height;
+  rCtx.fillStyle = '#0b0c1a';
+  rCtx.fillRect(0,0,W,H);
+
+  const slice = roiLedger.slice(-28);
+  const maxV  = Math.max(...slice.map(e => e.total), 1);
+  const bw    = (W - 4) / slice.length - 1;
+
+  // Cumulative line
+  const maxC = slice[slice.length-1]?.cumulative || 1;
+  rCtx.beginPath();
+  rCtx.strokeStyle = '#b45309';
+  rCtx.lineWidth = 1.5;
+  slice.forEach((e,i) => {
+    const x = 2 + i*(bw+1) + bw/2;
+    const y = H - (e.cumulative / maxC) * (H-10) - 4;
+    i===0 ? rCtx.moveTo(x,y) : rCtx.lineTo(x,y);
+  });
+  rCtx.stroke();
+
+  // Stacked bars
+  slice.forEach((e, i) => {
+    const x = 2 + i*(bw+1);
+    const totalH = (e.total / maxV) * (H - 16);
+    const ch = (e.compute / e.total) * totalH;
+    const ph = (e.productivity / e.total) * totalH;
+    const dh = totalH - ch - ph;
+
+    // compute savings layer
+    rCtx.fillStyle = 'rgba(5,150,105,0.7)';
+    rCtx.fillRect(x, H-4-ch, bw, ch);
+    // productivity layer
+    rCtx.fillStyle = 'rgba(139,92,246,0.6)';
+    rCtx.fillRect(x, H-4-ch-ph, bw, ph);
+    // data layer
+    rCtx.fillStyle = 'rgba(180,83,9,0.6)';
+    rCtx.fillRect(x, H-4-ch-ph-dh, bw, dh);
+  });
+
+  // Legend
+  [['COMPUTE','rgba(5,150,105,0.9)'],['PRODUCTIVITY','rgba(139,92,246,0.9)'],['DATA','rgba(180,83,9,0.9)']].forEach(([l,c],i) => {
+    rCtx.fillStyle = c;
+    rCtx.fillRect(4 + i*80, H-12, 8, 6);
+    rCtx.fillStyle = '#4b5380';
+    rCtx.font = '7px Courier New';
+    rCtx.fillText(l, 14+i*80, H-7);
+  });
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// API DATA LAYER
+// ══════════════════════════════════════════════════════════════
+const BASE = window.location.origin;
+
+async function loadMindState() {
+  try {
+    const d = await fetch(`${BASE}/api/telemetry/mindstate`).then(r=>r.json());
+    const cur = d.current;
+    const vec = cur.vector;
+    const color = cur.color || '#8b5cf6';
+
+    document.getElementById('ms-badge').textContent = cur.state.toUpperCase();
+    document.getElementById('ms-badge').style.color = color;
+    document.getElementById('ms-label').textContent = cur.label;
+    document.getElementById('ms-label').style.color = color;
+    document.getElementById('ms-desc').textContent  = cur.description;
+
+    const set = (id,fid,v,color) => {
+      document.getElementById(id).textContent = (v*100).toFixed(0)+'%';
+      document.getElementById(fid).style.width = (v*100)+'%';
+    };
+    set('d-stress','df-stress', vec.stress);
+    set('d-focus','df-focus',   vec.focus);
+    set('d-flow','df-flow',     vec.flow);
+    set('d-clarity','df-clarity',vec.clarity);
+
+    document.getElementById('sb-ms').textContent = cur.label;
+    document.getElementById('sb-state').textContent = cur.state.toUpperCase();
+
+    // Update aura target color from mindstate
+    targetColor = STATE_HUES[cur.state] || '#8b5cf6';
+  } catch(e) { console.error('mindstate', e); }
+}
+
+async function loadAura() {
+  try {
+    const d = await fetch(`${BASE}/api/telemetry/aura`).then(r=>r.json());
+    const snap = d.snapshot;
+
+    AURA.pulse     = snap.pulse_rate_hz;
+    AURA.intensity = snap.intensity;
+    AURA.alignment = snap.alignment_score;
+    AURA.resonance = snap.resonance;
+    AURA.trauma    = snap.trauma_index;
+    traumaFlash   += snap.trauma_index * 0.3;
+
+    document.getElementById('aura-hz').textContent      = snap.pulse_rate_hz.toFixed(3);
+    document.getElementById('aura-pattern').textContent = snap.pattern.toUpperCase();
+    document.getElementById('m-intensity').textContent  = (snap.intensity*100).toFixed(0)+'%';
+    document.getElementById('m-align').textContent      = (snap.alignment_score*100).toFixed(0)+'%';
+    document.getElementById('m-resonance').textContent  = (snap.resonance*100).toFixed(0)+'%';
+    document.getElementById('m-trauma').textContent     = snap.trauma_index.toFixed(3);
+
+    document.getElementById('sb-pulse').textContent  = snap.pulse_rate_hz.toFixed(3);
+    document.getElementById('sb-align').textContent  = (snap.alignment_score*100).toFixed(0);
+    document.getElementById('sb-aura').textContent   = (snap.intensity*100).toFixed(0)+'%';
+    document.getElementById('sb-freq').textContent   = snap.dominant_frequency.toFixed(4);
+    document.getElementById('sb-trauma').textContent = snap.trauma_events;
+
+    // Pulse series
+    const series = d.series || [];
+    pulseSeries     = series.map(s=>s.pulse);
+    intensitySeries = series.map(s=>s.intensity);
+    traumaSeries    = series.map(s=>s.trauma);
+    drawPulseChart();
+
+    // Trauma log
+    const traumas = d.trauma || [];
+    document.getElementById('trauma-list').innerHTML = traumas.map(tr=>`
+      <div class="trauma-item">
+        <div class="trauma-sev" style="color:${tr.severity>0.6?'#b91c1c':'#b45309'}">${(tr.severity*100).toFixed(0)}%</div>
+        <div>
+          <div class="trauma-desc">${tr.desc}</div>
+          <div class="trauma-status ${tr.resolved?'resolved':'active'}">${tr.resolved?`✓ RESOLVED · ${tr.recovery_ms.toFixed(0)}ms`:'● ACTIVE'}</div>
+        </div>
+      </div>`).join('') || '<div style="font-size:0.62rem;color:var(--muted);padding:8px">No trauma events recorded.</div>';
+
+    // Alignment matrix
+    const alm = d.alignment || [];
+    document.getElementById('alignment-list').innerHTML = alm.map(a=>{
+      const pct = (a.coherence*100).toFixed(0);
+      const col = a.coherence > 0.85 ? '#0d9488' : a.coherence > 0.7 ? '#8b5cf6' : '#b91c1c';
+      return `<div class="alignment-row">
+        <div class="aln-name">${a.agent}</div>
+        <div class="aln-bar"><div class="aln-fill" style="width:${pct}%;background:${col}"></div></div>
+        <div class="aln-score" style="color:${col}">${pct}%</div>
+      </div>`;
+    }).join('');
+
+  } catch(e) { console.error('aura', e); }
+}
+
+async function loadROI() {
+  try {
+    const d = await fetch(`${BASE}/api/telemetry/roi`).then(r=>r.json());
+    const s = d.snapshot?.summary || {};
+    const assets = d.snapshot?.assets || [];
+    const projs  = d.snapshot?.projections || {};
+
+    document.getElementById('roi-cumulative').textContent = '$'+fmt(s.cumulative_value);
+    document.getElementById('roi-daily').textContent      = '$'+fmt(s.daily_revenue);
+    document.getElementById('roi-breakeven').textContent  = s.breakeven_days+'d';
+    document.getElementById('roi-compute').textContent    = '$'+fmt(d.snapshot?.breakdown?.compute_savings);
+    document.getElementById('roi-vectors').textContent    = (s.memory_vectors||0).toLocaleString();
+    document.getElementById('sb-roi').textContent         = '$'+fmt(s.cumulative_value)+'/cumul';
+
+    const lev = s.leverage_ratio || 0;
+    document.getElementById('leverage-val').textContent = lev.toFixed(1)+'×';
+    document.getElementById('leverage-fill').style.width = Math.min(100, (lev/24)*100)+'%';
+
+    let total = 0;
+    document.getElementById('asset-list').innerHTML = assets.map(a=>{
+      total += a.total||0;
+      const cats = {memory:'#8b5cf6',sensing:'#0d9488',agent_ip:'#b45309',model:'#4b5380'};
+      return `<div class="asset-row">
+        <div class="asset-cat" style="background:${cats[a.category]||'#4b5380'}"></div>
+        <div class="asset-name">${a.name}</div>
+        <div class="asset-val">$${fmt(a.total)}</div>
+      </div>`;
+    }).join('');
+    document.getElementById('asset-total').textContent = '$'+fmt(total);
+
+    document.getElementById('proj-list').innerHTML = [
+      ['30 Days', projs['30d'], projs.roi_30d_pct+'% ROI'],
+      ['60 Days', projs['60d'], ''],
+      ['90 Days', projs['90d'], ''],
+    ].map(([p,v,badge])=>`<div class="proj-row">
+      <span class="proj-period">${p}</span>
+      ${badge?`<span class="proj-badge">${badge}</span>`:'<span></span>'}
+      <span class="proj-val">$${fmt(v)}</span>
+    </div>`).join('');
+
+    roiLedger = d.ledger || [];
+    drawRoiChart();
+
+  } catch(e) { console.error('roi', e); }
+}
+
+function fmt(n) {
+  if (!n && n!==0) return '—';
+  return Number(n).toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2});
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// WEBSOCKET (receive live telemetry ticks)
+// ══════════════════════════════════════════════════════════════
+let ws, wsRetry = 0;
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws`);
+  ws.onopen = () => { wsRetry = 0; };
+  ws.onclose = () => { setTimeout(connectWS, Math.min(1000*Math.pow(2,wsRetry++), 8000)); };
+  ws.onmessage = e => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.event === 'telemetry_tick') {
+        const p = msg.payload;
+        AURA.pulse     = p.aura_pulse     ?? AURA.pulse;
+        AURA.intensity = p.aura_intensity  ?? AURA.intensity;
+        AURA.alignment = p.alignment       ?? AURA.alignment;
+        AURA.trauma    = p.trauma_index    ?? AURA.trauma;
+        document.getElementById('aura-hz').textContent  = (AURA.pulse).toFixed(3);
+        document.getElementById('aura-state-lbl').textContent = (p.mindstate||'').toUpperCase();
+        document.getElementById('sb-ms').textContent = (p.mindstate||'').toUpperCase();
+        targetColor = STATE_HUES[p.mindstate] || '#8b5cf6';
+        pulseSeries.push(AURA.pulse); if(pulseSeries.length>120)pulseSeries.shift();
+        intensitySeries.push(AURA.intensity); if(intensitySeries.length>120)intensitySeries.shift();
+        traumaSeries.push(AURA.trauma); if(traumaSeries.length>120)traumaSeries.shift();
+        drawPulseChart();
+      }
+      if (msg.event === 'trauma') {
+        traumaFlash = 1;
+        AURA.shockwaves.push({r: 30, opacity: 0.8, born: Date.now()});
+        loadAura();
+      }
+    } catch(_) {}
+  };
+}
+connectWS();
+
+
+// ══════════════════════════════════════════════════════════════
+// TRAUMA INJECTION
+// ══════════════════════════════════════════════════════════════
+const TRAUMAS = [
+  "Council quorum breach — voter weight delta > 0.4",
+  "CSI frame buffer saturation — drop rate 18%",
+  "SovereignEngine reflection timeout — cycle 48",
+  "HybridRouter fallback cascade — 3 API failures",
+  "Qdrant memory write conflict — vector collision",
+];
+async function injectTrauma() {
+  const desc = TRAUMAS[Math.floor(Math.random()*TRAUMAS.length)];
+  const sev  = 0.4 + Math.random() * 0.5;
+  try {
+    await fetch(`${BASE}/api/telemetry/trauma`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({description:desc, severity:sev})
+    });
+    traumaFlash = 1;
+    AURA.shockwaves.push({r:20, opacity:1, born:Date.now()});
+    setTimeout(loadAura, 500);
+  } catch(e) {}
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// CLOCK
+// ══════════════════════════════════════════════════════════════
+function tick() {
+  const n = new Date();
+  document.getElementById('clock').textContent =
+    n.toLocaleTimeString('en-US',{hour12:false});
+}
+setInterval(tick, 1000); tick();
+
+
+// ══════════════════════════════════════════════════════════════
+// INIT + POLLING
+// ══════════════════════════════════════════════════════════════
+async function refresh() {
+  await Promise.all([loadMindState(), loadAura(), loadROI()]);
+}
+refresh();
+setInterval(loadMindState, 6000);
+setInterval(loadAura,      8000);
+setInterval(loadROI,      15000);
+setInterval(drawRoiChart, 30000);
+</script>
+</body>
+</html>
