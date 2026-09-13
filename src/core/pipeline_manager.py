@@ -5,9 +5,12 @@ dependency resolution, and streaming data flow.
 import asyncio
 import time
 import logging
-from typing import Dict, List, Any, Optional, Callable, Set
+from typing import TYPE_CHECKING, Dict, List, Any, Optional, Callable, Set
 from dataclasses import dataclass, field
 from enum import Enum
+
+if TYPE_CHECKING:
+    from .pipeline_learn import PipelineLearner
 
 logger = logging.getLogger("ark95x.pipeline")
 
@@ -47,12 +50,17 @@ class PipelineRun:
 class PipelineManager:
     """DAG pipeline executor with parallel stage resolution."""
 
-    def __init__(self, config: Optional[Dict] = None):
+    def __init__(
+        self,
+        config: Optional[Dict] = None,
+        learner: Optional["PipelineLearner"] = None,
+    ):
         self.config = config or {}
         self.pipelines: Dict[str, List[PipelineStage]] = {}
         self.runs: Dict[str, PipelineRun] = {}
         self.max_parallel = self.config.get("max_parallel", 10)
         self._semaphore = asyncio.Semaphore(self.max_parallel)
+        self.learner = learner
 
     def define_pipeline(self, name: str, stages: List[PipelineStage]) -> None:
         self.pipelines[name] = stages
@@ -128,28 +136,37 @@ class PipelineManager:
         async with self._semaphore:
             stage.status = StageStatus.RUNNING
             start = time.time()
-            for attempt in range(stage.max_retries + 1):
-                try:
-                    if stage.handler:
-                        result = await asyncio.wait_for(
-                            stage.handler(ctx), timeout=stage.timeout
-                        )
-                        stage.result = result
-                        ctx["__results__"][stage.name] = result
-                    stage.status = StageStatus.COMPLETED
-                    stage.duration = time.time() - start
-                    return
-                except asyncio.TimeoutError:
-                    stage.error = f"Timeout after {stage.timeout}s"
-                    stage.retries = attempt + 1
-                except Exception as e:
-                    stage.error = str(e)
-                    stage.retries = attempt + 1
-                    if attempt < stage.max_retries:
-                        await asyncio.sleep(2 ** attempt)
-            stage.status = StageStatus.FAILED
-            stage.duration = time.time() - start
-            logger.error(f"Stage {stage.name} failed: {stage.error}")
+            try:
+                for attempt in range(stage.max_retries + 1):
+                    try:
+                        if stage.handler:
+                            result = await asyncio.wait_for(
+                                stage.handler(ctx), timeout=stage.timeout
+                            )
+                            stage.result = result
+                            ctx["__results__"][stage.name] = result
+                        stage.status = StageStatus.COMPLETED
+                        stage.duration = time.time() - start
+                        return
+                    except asyncio.TimeoutError:
+                        stage.error = f"Timeout after {stage.timeout}s"
+                        stage.retries = attempt + 1
+                    except Exception as e:
+                        stage.error = str(e)
+                        stage.retries = attempt + 1
+                        if attempt < stage.max_retries:
+                            await asyncio.sleep(2 ** attempt)
+                stage.status = StageStatus.FAILED
+                stage.duration = time.time() - start
+                logger.error(f"Stage {stage.name} failed: {stage.error}")
+            finally:
+                if self.learner is not None:
+                    self.learner.observe(
+                        stage_name=stage.name,
+                        duration=stage.duration,
+                        success=stage.status == StageStatus.COMPLETED,
+                        retries=stage.retries,
+                    )
 
     def get_run_summary(self, run_id: str) -> Dict[str, Any]:
         run = self.runs.get(run_id)
