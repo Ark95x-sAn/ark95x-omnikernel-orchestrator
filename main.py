@@ -28,6 +28,11 @@ try:
 except ImportError:
     EthicalCrewAgents = None
 
+try:
+    from src.sensing.wifi_sensing_agent import WiFiSensingAgent
+except ImportError:
+    WiFiSensingAgent = None
+
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
@@ -59,6 +64,7 @@ class ARK95XOrchestrator:
         self.crew_agents = None
         self.session_id = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
         self.memory: list = []
+        self.wifi_sensing_agent = None
         log.info(f"ARK95X Orchestrator initialized | session={self.session_id}")
 
     def _load_config(self) -> dict:
@@ -109,6 +115,15 @@ class ARK95XOrchestrator:
             log.info("[BOOT] EthicalCrewAgents online")
         else:
             log.warning("[BOOT] EthicalCrewAgents not available")
+
+        # 4. Wi-Fi Sensing Agent (RuView CSI pipeline)
+        if WiFiSensingAgent:
+            self.wifi_sensing_agent = WiFiSensingAgent(
+                config=self.config.get("wifi_sensing", {})
+            )
+            log.info("[BOOT] WiFiSensingAgent online")
+        else:
+            log.warning("[BOOT] WiFiSensingAgent not available")
 
         log.info("=== BOOT SEQUENCE COMPLETE ===")
 
@@ -173,8 +188,28 @@ class ARK95XOrchestrator:
                 task = line[5:]
                 result = await self.run_crew_task(task)
                 print(f"\nCrew Result:\n{result}\n")
+            elif line.lower().startswith("sense"):
+                await self._run_sense_demo()
             else:
-                print("Unknown command. Try: reflect <prompt> | crew <task> | improve | status | quit")
+                print("Unknown command. Try: reflect <prompt> | crew <task> | sense | improve | status | quit")
+
+    async def _run_sense_demo(self):
+        """Run a quick Wi-Fi sensing simulation and print results."""
+        if not self.wifi_sensing_agent:
+            print("[WiFi Sensing] Agent not available.")
+            return
+        print("\n[WiFi Sensing] Simulating 60 CSI frames with motion=True ...")
+        result = await self.wifi_sensing_agent.handle_task(
+            {"action": "simulate", "n": 60, "motion": True}
+        )
+        last = result.get("last_analysis") or {}
+        print(f"  Presence      : {last.get('presence', 'N/A')} "
+              f"(confidence {last.get('presence_confidence', 0):.2f})")
+        print(f"  Motion        : {last.get('motion_detected', 'N/A')} "
+              f"(intensity {last.get('motion_intensity', 0):.2f})")
+        bpm = last.get('breathing_rate_bpm')
+        print(f"  Breathing     : {f'{bpm:.1f} bpm' if bpm else 'not detected'}")
+        print(f"  Frames used   : {last.get('frame_count', 0)}\n")
 
     def _print_status(self):
         print(f"""
@@ -184,6 +219,7 @@ Autonomy    : {self.config.get('autonomy_level', 'N/A')}
 Router      : {'ONLINE' if self.hybrid_router else 'OFFLINE'}
 Reflection  : {'ONLINE' if self.reflection_engine else 'OFFLINE'}
 Crew        : {'ONLINE' if self.crew_agents else 'OFFLINE'}
+WiFi Sensing: {'ONLINE' if self.wifi_sensing_agent else 'OFFLINE'}
 Self-Learn  : {self.config.get('self_learning', False)}
 Ethical Mode: {self.config.get('ethical_mode', False)}
 Memory Items: {len(self.memory)}

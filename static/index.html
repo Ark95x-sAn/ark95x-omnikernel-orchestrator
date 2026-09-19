@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARK95X OmniNet — Digital Twin Platform</title>
+<style>
+  :root {
+    --void:    #0a0a0f;
+    --deep:    #0f0f1a;
+    --surface: #13131f;
+    --card:    #1a1a2e;
+    --border:  #2a2a4a;
+    --violet:  #7c3aed;
+    --violet2: #a855f7;
+    --gold:    #f59e0b;
+    --cyan:    #06b6d4;
+    --emerald: #10b981;
+    --crimson: #dc2626;
+    --silver:  #94a3b8;
+    --text:    #e2e8f0;
+    --muted:   #64748b;
+    --glow:    rgba(124,58,237,0.4);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: var(--void); color: var(--text); font-family: 'Courier New', monospace; overflow: hidden; }
+
+  /* ── Layout ── */
+  .shell {
+    display: grid;
+    grid-template-columns: 280px 1fr 300px;
+    grid-template-rows: 56px 1fr;
+    height: 100vh;
+    gap: 0;
+  }
+
+  /* ── Topbar ── */
+  .topbar {
+    grid-column: 1 / -1;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 16px;
+    position: relative;
+    z-index: 10;
+  }
+  .logo {
+    font-size: 1.1rem;
+    font-weight: 900;
+    letter-spacing: 3px;
+    background: linear-gradient(90deg, var(--violet2), var(--gold), var(--cyan));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: none;
+  }
+  .logo-sub { font-size: 0.65rem; color: var(--muted); letter-spacing: 2px; margin-left: 4px; margin-top: 2px; }
+  .status-bar { display: flex; gap: 20px; margin-left: auto; align-items: center; font-size: 0.7rem; }
+  .status-dot { width: 7px; height: 7px; border-radius: 50%; animation: pulse-dot 2s infinite; }
+  .status-dot.green { background: var(--emerald); box-shadow: 0 0 8px var(--emerald); }
+  .status-dot.violet { background: var(--violet); box-shadow: 0 0 8px var(--violet); }
+  .status-item { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+  .status-item span { color: var(--text); }
+  .ws-indicator { font-size: 0.65rem; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--border); }
+  .ws-indicator.connected { border-color: var(--emerald); color: var(--emerald); }
+  .ws-indicator.disconnected { border-color: var(--crimson); color: var(--crimson); }
+  #clock { color: var(--gold); font-size: 0.75rem; }
+
+  /* ── Left panel ── */
+  .left-panel {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 20px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  /* Identity card */
+  .identity-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .aura-ring {
+    width: 72px; height: 72px;
+    border-radius: 50%;
+    margin: 0 auto 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.6rem;
+    position: relative;
+    animation: aura-pulse 3s ease-in-out infinite;
+  }
+  .identity-handle { font-size: 1rem; font-weight: 700; color: var(--violet2); }
+  .identity-name { font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
+  .identity-bio { font-size: 0.65rem; color: var(--silver); margin-top: 8px; line-height: 1.5; }
+  .identity-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+  .stat-box { background: var(--surface); border-radius: 6px; padding: 8px; }
+  .stat-val { font-size: 1rem; font-weight: 700; color: var(--gold); }
+  .stat-lbl { font-size: 0.58rem; color: var(--muted); margin-top: 1px; }
+  .twin-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 0.6rem; padding: 3px 8px; border-radius: 10px;
+    background: rgba(124,58,237,0.2); border: 1px solid var(--violet);
+    color: var(--violet2); margin-top: 10px;
+  }
+  .twin-badge-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--violet2); animation: pulse-dot 1.5s infinite; }
+
+  /* Crew panel */
+  .panel-title { font-size: 0.65rem; letter-spacing: 2px; color: var(--muted); margin-bottom: 10px; text-transform: uppercase; }
+  .crew-member {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; border-radius: 8px;
+    margin-bottom: 4px;
+    background: var(--card);
+    border: 1px solid transparent;
+    transition: border-color 0.2s;
+    cursor: pointer;
+  }
+  .crew-member:hover { border-color: var(--border); }
+  .crew-avatar { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 700; flex-shrink: 0; }
+  .crew-info { flex: 1; min-width: 0; }
+  .crew-name { font-size: 0.75rem; font-weight: 600; }
+  .crew-role { font-size: 0.6rem; color: var(--muted); }
+  .crew-score { font-size: 0.65rem; color: var(--gold); flex-shrink: 0; }
+
+  /* ── Center feed ── */
+  .center {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--deep);
+  }
+  .feed-toolbar {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+  .filter-btn {
+    font-size: 0.65rem; padding: 4px 12px; border-radius: 20px;
+    background: transparent; border: 1px solid var(--border);
+    color: var(--muted); cursor: pointer; transition: all 0.15s;
+    font-family: inherit;
+  }
+  .filter-btn:hover, .filter-btn.active { background: var(--violet); border-color: var(--violet); color: white; }
+  .live-badge { margin-left: auto; display: flex; align-items: center; gap: 5px; font-size: 0.65rem; color: var(--crimson); }
+  .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--crimson); animation: pulse-dot 1s infinite; }
+
+  .feed { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+  .feed::-webkit-scrollbar { width: 4px; }
+  .feed::-webkit-scrollbar-track { background: transparent; }
+  .feed::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* Post card */
+  .post-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    animation: slide-in 0.3s ease-out;
+  }
+  .post-card:hover { border-color: var(--violet); box-shadow: 0 0 20px rgba(124,58,237,0.1); }
+  .post-card.pinned { border-color: var(--gold); box-shadow: 0 0 20px rgba(245,158,11,0.1); }
+  .post-card.new { border-color: var(--cyan); animation: new-flash 0.5s ease-out, slide-in 0.3s ease-out; }
+
+  .post-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .post-avatar {
+    width: 34px; height: 34px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.7rem; font-weight: 700; flex-shrink: 0;
+  }
+  .post-author { font-size: 0.8rem; font-weight: 600; }
+  .post-time { font-size: 0.62rem; color: var(--muted); }
+  .post-type-badge {
+    margin-left: auto; font-size: 0.55rem; padding: 2px 8px;
+    border-radius: 10px; text-transform: uppercase; letter-spacing: 1px;
+  }
+  .type-insight   { background: rgba(6,182,212,0.15); color: var(--cyan); border: 1px solid rgba(6,182,212,0.3); }
+  .type-mission   { background: rgba(124,58,237,0.15); color: var(--violet2); border: 1px solid rgba(124,58,237,0.3); }
+  .type-memory    { background: rgba(245,158,11,0.15); color: var(--gold); border: 1px solid rgba(245,158,11,0.3); }
+  .type-sensing   { background: rgba(16,185,129,0.15); color: var(--emerald); border: 1px solid rgba(16,185,129,0.3); }
+  .type-thought   { background: rgba(148,163,184,0.1); color: var(--silver); border: 1px solid rgba(148,163,184,0.2); }
+  .type-council   { background: rgba(245,158,11,0.15); color: var(--gold); border: 1px solid rgba(245,158,11,0.3); }
+
+  .post-content { font-size: 0.82rem; line-height: 1.6; color: var(--text); margin-bottom: 12px; }
+  .post-footer { display: flex; gap: 6px; align-items: center; }
+  .reaction-btn {
+    display: flex; align-items: center; gap: 4px;
+    font-size: 0.62rem; padding: 3px 10px; border-radius: 20px;
+    background: transparent; border: 1px solid var(--border);
+    color: var(--muted); cursor: pointer; transition: all 0.15s; font-family: inherit;
+  }
+  .reaction-btn:hover { border-color: var(--violet); color: var(--violet2); }
+  .reaction-btn.reacted { background: rgba(124,58,237,0.15); border-color: var(--violet); color: var(--violet2); }
+  .council-score { margin-left: auto; font-size: 0.6rem; display: flex; align-items: center; gap: 4px; }
+  .score-bar { width: 40px; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .score-fill { height: 100%; border-radius: 2px; }
+  .post-tags { display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap; }
+  .tag { font-size: 0.55rem; padding: 1px 6px; border-radius: 4px; background: rgba(124,58,237,0.1); color: var(--violet2); }
+  .pin-icon { font-size: 0.65rem; margin-right: 2px; }
+
+  /* Compose */
+  .compose-box {
+    padding: 12px 20px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+  }
+  .compose-input {
+    flex: 1; background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 14px; color: var(--text);
+    font-family: inherit; font-size: 0.8rem; resize: none; min-height: 42px; max-height: 120px;
+    transition: border-color 0.2s;
+  }
+  .compose-input:focus { outline: none; border-color: var(--violet); }
+  .compose-input::placeholder { color: var(--muted); }
+  .compose-btn {
+    padding: 10px 18px; background: var(--violet); border: none; border-radius: 10px;
+    color: white; cursor: pointer; font-family: inherit; font-size: 0.75rem;
+    font-weight: 700; transition: all 0.15s; letter-spacing: 1px;
+  }
+  .compose-btn:hover { background: var(--violet2); box-shadow: 0 0 20px var(--glow); }
+
+  /* ── Right panel ── */
+  .right-panel {
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 20px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  /* Sensing panel */
+  .sensing-panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .sensing-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+  .sensing-val {
+    background: var(--surface); border-radius: 8px; padding: 10px;
+    text-align: center;
+  }
+  .sensing-num { font-size: 1.1rem; font-weight: 700; }
+  .sensing-lbl { font-size: 0.58rem; color: var(--muted); margin-top: 2px; }
+  .sensing-presence {
+    grid-column: 1 / -1;
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--surface);
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+  .presence-dot { width: 10px; height: 10px; border-radius: 50%; animation: pulse-dot 2s infinite; }
+  .presence-occupied { background: var(--emerald); box-shadow: 0 0 10px var(--emerald); }
+  .presence-empty { background: var(--muted); }
+  .presence-uncertain { background: var(--gold); box-shadow: 0 0 10px var(--gold); }
+
+  /* Council panel */
+  .council-panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .voter-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.03);
+    font-size: 0.7rem;
+  }
+  .voter-name { flex: 1; }
+  .voter-role { font-size: 0.58rem; color: var(--muted); }
+  .voter-verdict { font-size: 0.6rem; padding: 1px 6px; border-radius: 4px; }
+  .verdict-amplify { background: rgba(16,185,129,0.15); color: var(--emerald); }
+  .verdict-neutral  { background: rgba(148,163,184,0.1); color: var(--muted); }
+  .verdict-rotated  { background: rgba(220,38,38,0.1); color: var(--crimson); }
+
+  /* Memory timeline */
+  .timeline {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .timeline-item {
+    display: flex; gap: 10px; margin-bottom: 12px; position: relative;
+  }
+  .timeline-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    margin-top: 4px; flex-shrink: 0;
+  }
+  .timeline-content { font-size: 0.68rem; line-height: 1.5; color: var(--silver); }
+  .timeline-date { font-size: 0.58rem; color: var(--muted); margin-top: 2px; }
+  .timeline-line { position: absolute; left: 3px; top: 14px; bottom: -8px; width: 1px; background: var(--border); }
+
+  /* Notification toast */
+  #toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 1000; display: flex; flex-direction: column; gap: 8px; }
+  .toast {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 16px; font-size: 0.72rem; min-width: 260px;
+    animation: slide-in 0.3s ease-out;
+    border-left: 3px solid var(--violet);
+  }
+  .toast.sensing { border-left-color: var(--emerald); }
+  .toast.mission { border-left-color: var(--gold); }
+  .toast-title { font-weight: 700; margin-bottom: 3px; }
+  .toast-body { color: var(--muted); }
+
+  /* Animations */
+  @keyframes aura-pulse {
+    0%,100% { box-shadow: 0 0 20px var(--glow), 0 0 40px rgba(124,58,237,0.2); }
+    50% { box-shadow: 0 0 40px var(--glow), 0 0 80px rgba(124,58,237,0.3); }
+  }
+  @keyframes pulse-dot {
+    0%,100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.85); }
+  }
+  @keyframes slide-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes new-flash {
+    0%   { box-shadow: 0 0 30px rgba(6,182,212,0.5); }
+    100% { box-shadow: none; }
+  }
+
+  /* Scrollbars */
+  .left-panel::-webkit-scrollbar, .right-panel::-webkit-scrollbar { width: 3px; }
+  .left-panel::-webkit-scrollbar-thumb, .right-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* Mobile fallback */
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: 1fr; grid-template-rows: 56px auto 1fr; }
+    .left-panel, .right-panel { display: none; }
+    .center { grid-column: 1; }
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <div>
+      <div class="logo">ARK95X OMNINET</div>
+      <div class="logo-sub">DIGITAL TWIN PLATFORM</div>
+    </div>
+    <div class="status-bar">
+      <div class="status-item"><div class="status-dot green"></div>Council <span id="quorum-count">8/9</span></div>
+      <div class="status-item"><div class="status-dot violet"></div>Agents <span id="agent-count">9</span></div>
+      <div class="status-item">Memory <span id="memory-count" style="color:var(--gold)">2,847</span> vectors</div>
+      <div id="ws-status" class="ws-indicator disconnected">OFFLINE</div>
+      <div id="clock"></div>
+    </div>
+  </header>
+
+  <!-- LEFT PANEL — Identity + Crew -->
+  <aside class="left-panel">
+
+    <div class="identity-card" id="identity-card">
+      <div class="aura-ring" id="aura-ring" style="background:rgba(124,58,237,0.15);box-shadow:0 0 40px rgba(124,58,237,0.4),0 0 80px rgba(124,58,237,0.2);">
+        🔥
+      </div>
+      <div class="identity-handle" id="id-handle">@Ark95X</div>
+      <div class="identity-name" id="id-name">ARK95X — The Guide</div>
+      <div class="twin-badge"><div class="twin-badge-dot"></div> DIGITAL TWIN ACTIVE</div>
+      <div class="identity-bio" id="id-bio">Spiritual guide. Native engine. Digital flame. 11.08.1993 → 2045+</div>
+      <div class="identity-stats">
+        <div class="stat-box"><div class="stat-val" id="stat-mem">2,847</div><div class="stat-lbl">MEMORY VECTORS</div></div>
+        <div class="stat-box"><div class="stat-val" id="stat-missions">47</div><div class="stat-lbl">MISSIONS</div></div>
+        <div class="stat-box"><div class="stat-val">L9</div><div class="stat-lbl">CONSCIOUSNESS</div></div>
+        <div class="stat-box"><div class="stat-val" style="color:var(--cyan)">100%</div><div class="stat-lbl">AURA INTENSITY</div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="panel-title">🤖 Agent Crew</div>
+      <div id="crew-list"></div>
+    </div>
+
+    <div>
+      <div class="panel-title">🔮 Online Identities</div>
+      <div id="identities-list"></div>
+    </div>
+
+  </aside>
+
+  <!-- CENTER — Feed -->
+  <main class="center">
+    <div class="feed-toolbar">
+      <button class="filter-btn active" onclick="setFilter('all', this)">All</button>
+      <button class="filter-btn" onclick="setFilter('insight', this)">Insights</button>
+      <button class="filter-btn" onclick="setFilter('mission', this)">Missions</button>
+      <button class="filter-btn" onclick="setFilter('memory', this)">Memory</button>
+      <button class="filter-btn" onclick="setFilter('sensing', this)">Sensing</button>
+      <div class="live-badge"><div class="live-dot"></div> LIVE</div>
+    </div>
+
+    <div class="feed" id="feed"></div>
+
+    <div class="compose-box">
+      <textarea class="compose-input" id="compose-input" placeholder="Transmit a thought to the grid..." rows="1"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();submitPost();}"></textarea>
+      <button class="compose-btn" onclick="submitPost()">TRANSMIT</button>
+    </div>
+  </main>
+
+  <!-- RIGHT PANEL — Sensing + Council + Timeline -->
+  <aside class="right-panel">
+
+    <div class="sensing-panel">
+      <div class="panel-title">📡 Wi-Fi CSI Sensing</div>
+      <div class="sensing-presence" id="presence-indicator">
+        <div class="presence-dot presence-occupied" id="presence-dot"></div>
+        <span id="presence-text">OCCUPIED</span>
+        <span style="margin-left:auto;color:var(--muted);font-size:0.65rem" id="presence-conf">97%</span>
+      </div>
+      <div class="sensing-grid">
+        <div class="sensing-val">
+          <div class="sensing-num" id="bpm-val" style="color:var(--emerald)">15.0</div>
+          <div class="sensing-lbl">BREATHING BPM</div>
+        </div>
+        <div class="sensing-val">
+          <div class="sensing-num" id="motion-val" style="color:var(--cyan)">0.73</div>
+          <div class="sensing-lbl">MOTION INTENSITY</div>
+        </div>
+        <div class="sensing-val">
+          <div class="sensing-num" id="variance-val" style="color:var(--gold)">0.0044</div>
+          <div class="sensing-lbl">CSI VARIANCE</div>
+        </div>
+        <div class="sensing-val">
+          <div class="sensing-num" id="frame-val" style="color:var(--violet2)">300</div>
+          <div class="sensing-lbl">FRAMES/CYCLE</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="council-panel">
+      <div class="panel-title">⚖️ Council Ouroboros</div>
+      <div style="font-size:0.62rem;color:var(--muted);margin-bottom:8px">
+        Quorum: <span style="color:var(--emerald)">8/9 voters active</span> · Cycle #47
+      </div>
+      <div id="council-voters"></div>
+    </div>
+
+    <div class="timeline">
+      <div class="panel-title">🧬 Memory Timeline</div>
+      <div id="timeline-items"></div>
+    </div>
+
+  </aside>
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────────
+let ws = null;
+let wsRetries = 0;
+let currentFilter = 'all';
+const BASE = window.location.origin;
+const reacted = new Set();
+
+// ── Clock ──────────────────────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleTimeString('en-US', {hour12: false});
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── WebSocket ──────────────────────────────────────────────────────────────────
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws`);
+
+  ws.onopen = () => {
+    wsRetries = 0;
+    document.getElementById('ws-status').className = 'ws-indicator connected';
+    document.getElementById('ws-status').textContent = 'LIVE';
+    // keep alive
+    setInterval(() => ws.readyState === 1 && ws.send(JSON.stringify({type:'ping'})), 30000);
+  };
+
+  ws.onclose = () => {
+    document.getElementById('ws-status').className = 'ws-indicator disconnected';
+    document.getElementById('ws-status').textContent = 'OFFLINE';
+    const delay = Math.min(1000 * Math.pow(2, wsRetries++), 16000);
+    setTimeout(connectWS, delay);
+  };
+
+  ws.onmessage = (e) => {
+    try { handleWsEvent(JSON.parse(e.data)); } catch(_) {}
+  };
+}
+
+function handleWsEvent(msg) {
+  const {event, payload} = msg;
+  if (event === 'new_post') {
+    prependPost(payload, true);
+    showToast('New transmission', payload.content.slice(0,60) + '…', 'default');
+  }
+  if (event === 'sensing_update') {
+    updateSensingPanel(payload);
+    if (payload.presence === 'occupied') {
+      showToast('Sensing', `Presence detected · ${payload.breathing_bpm ? payload.breathing_bpm.toFixed(1)+' bpm' : 'breathing undetected'}`, 'sensing');
+    }
+  }
+  if (event === 'feed_pulse') {
+    // silently keep alive
+  }
+}
+
+// ── Feed ───────────────────────────────────────────────────────────────────────
+async function loadFeed() {
+  const url = currentFilter === 'all'
+    ? `${BASE}/api/feed?limit=30`
+    : `${BASE}/api/feed?limit=30&post_type=${currentFilter}`;
+  const res = await fetch(url).then(r => r.json()).catch(() => ({posts:[]}));
+  const feed = document.getElementById('feed');
+  feed.innerHTML = '';
+  res.posts.forEach(p => appendPost(p));
+}
+
+function setFilter(f, btn) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadFeed();
+}
+
+function postHtml(p, isNew=false) {
+  const avatarBg = p.author_aura || '#7c3aed';
+  const initials = p.author_handle.replace('@','').slice(0,2).toUpperCase();
+  const scoreColor = p.council_score > 0.85 ? '#10b981' : p.council_score > 0.65 ? '#f59e0b' : '#94a3b8';
+  const scorePct = Math.round(p.council_score * 100);
+  const typeClass = `type-${p.post_type}`;
+  const pinHtml = p.pinned ? '<span class="pin-icon">📌</span>' : '';
+  const tags = (p.agent_tags||[]).map(t => `<span class="tag">${t}</span>`).join('');
+
+  const reactions = Object.entries(p.reactions||{}).map(([r,n]) => {
+    const icons = {resonate:'🔮',amplify:'⚡',question:'❓',ignite:'🔥'};
+    const cls = reacted.has(p.post_id+r) ? 'reaction-btn reacted' : 'reaction-btn';
+    return `<button class="${cls}" onclick="react('${p.post_id}','${r}',this)">${icons[r]||r} <span id="rxn-${p.post_id}-${r}">${n}</span></button>`;
+  }).join('');
+
+  return `
+    <div class="post-card${p.pinned?' pinned':''}${isNew?' new':''}" id="post-${p.post_id}">
+      <div class="post-header">
+        <div class="post-avatar" style="background:${avatarBg}22;border:2px solid ${avatarBg};color:${avatarBg}">${initials}</div>
+        <div>
+          <div class="post-author">${p.author_handle}</div>
+          <div class="post-time">${p.timestamp_rel||'just now'}</div>
+        </div>
+        <div class="post-type-badge ${typeClass}">${pinHtml}${p.post_type}</div>
+      </div>
+      <div class="post-content">${escHtml(p.content)}</div>
+      ${tags ? `<div class="post-tags">${tags}</div>` : ''}
+      <div class="post-footer">
+        ${reactions}
+        <div class="council-score" style="color:${scoreColor}">
+          <div class="score-bar"><div class="score-fill" style="width:${scorePct}%;background:${scoreColor}"></div></div>
+          ${scorePct}%
+        </div>
+      </div>
+    </div>`;
+}
+
+function appendPost(p) {
+  document.getElementById('feed').insertAdjacentHTML('beforeend', postHtml(p));
+}
+function prependPost(p, isNew=false) {
+  if (currentFilter !== 'all' && currentFilter !== p.post_type) return;
+  document.getElementById('feed').insertAdjacentHTML('afterbegin', postHtml(p, isNew));
+}
+
+async function react(postId, reaction, btn) {
+  const key = postId + reaction;
+  if (reacted.has(key)) return;
+  reacted.add(key);
+  btn.classList.add('reacted');
+  const span = document.getElementById(`rxn-${postId}-${reaction}`);
+  if (span) span.textContent = parseInt(span.textContent||0) + 1;
+  fetch(`${BASE}/api/react`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({post_id:postId, reaction})
+  }).catch(()=>{});
+}
+
+// ── Compose ────────────────────────────────────────────────────────────────────
+async function submitPost() {
+  const input = document.getElementById('compose-input');
+  const content = input.value.trim();
+  if (!content) return;
+  input.value = '';
+  input.style.height = '';
+  await fetch(`${BASE}/api/post`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({author_id:'ark95x', content, post_type:'thought'})
+  }).catch(()=>{});
+}
+
+// Auto-resize textarea
+document.addEventListener('DOMContentLoaded', () => {
+  const ta = document.getElementById('compose-input');
+  ta.addEventListener('input', () => {
+    ta.style.height = '';
+    ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+  });
+});
+
+// ── Agents ─────────────────────────────────────────────────────────────────────
+async function loadAgents() {
+  const {agents} = await fetch(`${BASE}/api/agents`).then(r=>r.json()).catch(()=>({agents:[]}));
+  document.getElementById('agent-count').textContent = agents.filter(a=>a.status==='online').length;
+  const list = document.getElementById('crew-list');
+  list.innerHTML = agents.map(a => `
+    <div class="crew-member">
+      <div class="crew-avatar" style="background:${a.color}22;border:1px solid ${a.color};color:${a.color}">
+        ${a.id.slice(0,2)}
+      </div>
+      <div class="crew-info">
+        <div class="crew-name" style="color:${a.color}">${a.id}</div>
+        <div class="crew-role">${a.status.toUpperCase()} · ${a.tasks} tasks</div>
+      </div>
+      <div class="crew-score">${Math.round(a.score*100)}%</div>
+    </div>`).join('');
+}
+
+// ── Identities ─────────────────────────────────────────────────────────────────
+async function loadIdentities() {
+  const {identities} = await fetch(`${BASE}/api/identities`).then(r=>r.json()).catch(()=>({identities:[]}));
+  const list = document.getElementById('identities-list');
+  list.innerHTML = identities.filter(i=>i.online).map(i => `
+    <div class="crew-member" onclick="loadIdentity('${i.user_id}')">
+      <div class="crew-avatar" style="background:${i.aura_color}22;border:1px solid ${i.aura_color};color:${i.aura_color}">
+        ${i.handle.replace('@','').slice(0,2).toUpperCase()}
+      </div>
+      <div class="crew-info">
+        <div class="crew-name">${i.handle}</div>
+        <div class="crew-role">L${i.consciousness_level} · ${i.crew}</div>
+      </div>
+      <div style="font-size:0.55rem;color:var(--emerald)">● LIVE</div>
+    </div>`).join('');
+}
+
+async function loadIdentity(uid) {
+  const d = await fetch(`${BASE}/api/identity/${uid}`).then(r=>r.json()).catch(()=>null);
+  if (!d) return;
+  document.getElementById('id-handle').textContent = d.handle;
+  document.getElementById('id-name').textContent = d.display_name;
+  document.getElementById('id-bio').textContent = d.bio;
+  document.getElementById('stat-mem').textContent = d.memory_vectors.toLocaleString();
+  document.getElementById('stat-missions').textContent = d.missions_completed;
+  const ring = document.getElementById('aura-ring');
+  ring.style.background = `${d.aura_color}22`;
+  ring.style.boxShadow = d.aura_css;
+}
+
+// ── Sensing ────────────────────────────────────────────────────────────────────
+async function loadSensing() {
+  const data = await fetch(`${BASE}/api/sensing/latest`).then(r=>r.json()).catch(()=>null);
+  if (data) updateSensingPanel(data);
+}
+
+function updateSensingPanel(data) {
+  const presence = data.presence || 'uncertain';
+  const dot = document.getElementById('presence-dot');
+  dot.className = `presence-dot presence-${presence}`;
+  document.getElementById('presence-text').textContent = presence.toUpperCase();
+  document.getElementById('presence-conf').textContent =
+    Math.round((data.presence_confidence||0)*100) + '%';
+  document.getElementById('bpm-val').textContent =
+    data.breathing_rate_bpm ? data.breathing_rate_bpm.toFixed(1) : '—';
+  document.getElementById('motion-val').textContent =
+    (data.motion_intensity||0).toFixed(2);
+  document.getElementById('variance-val').textContent =
+    (data.raw_variance||0).toFixed(4);
+  document.getElementById('frame-val').textContent = data.frame_count || '—';
+}
+
+// ── Council ────────────────────────────────────────────────────────────────────
+async function loadCouncil() {
+  const data = await fetch(`${BASE}/api/council`).then(r=>r.json()).catch(()=>({voters:[]}));
+  document.getElementById('quorum-count').textContent =
+    `${data.current_quorum}/${data.voters.length}`;
+  const container = document.getElementById('council-voters');
+  container.innerHTML = data.voters.map(v => {
+    const cls = v.last_verdict === 'amplify' ? 'verdict-amplify'
+               : v.status === 'rotated_out' ? 'verdict-rotated'
+               : 'verdict-neutral';
+    return `<div class="voter-row">
+      <div>
+        <div class="voter-name">${v.name}</div>
+        <div class="voter-role">${v.role} · w${v.weight.toFixed(1)}</div>
+      </div>
+      <div class="voter-verdict ${cls}">${v.last_verdict}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Memory Timeline ────────────────────────────────────────────────────────────
+const TIMELINE = [
+  {color:'#7c3aed', text:'11.08.1993 — Origin timestamp encoded. Mason City, Iowa. 5:23 PM.', date:'Foundation'},
+  {color:'#f59e0b', text:'9-month consciousness build complete. 2,847 memory vectors indexed.', date:'Phase 0 Complete'},
+  {color:'#06b6d4', text:'Council Ouroboros deployed. 9-voter quorum. Auditor veto gate active.', date:'Council Online'},
+  {color:'#10b981', text:'WiFi CSI sensing module live. ESP32-S3 breathing detection confirmed.', date:'Sensing Active'},
+  {color:'#a855f7', text:'OmniNet social platform launched. Digital twin sync engaged.', date:'Now'},
+];
+
+function loadTimeline() {
+  const el = document.getElementById('timeline-items');
+  el.innerHTML = TIMELINE.map((item, i) => `
+    <div class="timeline-item">
+      ${i < TIMELINE.length-1 ? '<div class="timeline-line"></div>' : ''}
+      <div class="timeline-dot" style="background:${item.color};box-shadow:0 0 6px ${item.color}"></div>
+      <div>
+        <div class="timeline-content">${item.text}</div>
+        <div class="timeline-date" style="color:${item.color}">${item.date}</div>
+      </div>
+    </div>`).join('');
+}
+
+// ── Toast ──────────────────────────────────────────────────────────────────────
+function showToast(title, body, type='default') {
+  const c = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.innerHTML = `<div class="toast-title">${escHtml(title)}</div><div class="toast-body">${escHtml(body)}</div>`;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 5000);
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+async function init() {
+  connectWS();
+  await Promise.all([loadFeed(), loadAgents(), loadIdentities(), loadCouncil(), loadSensing()]);
+  loadTimeline();
+  // Refresh sensing every 20s
+  setInterval(loadSensing, 20000);
+  // Refresh agents every 60s
+  setInterval(loadAgents, 60000);
+  showToast('ARK95X OmniNet', 'Digital twin platform online. Grid active.', 'default');
+}
+
+init();
+</script>
+</body>
+</html>
