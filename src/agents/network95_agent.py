@@ -33,6 +33,7 @@ from src.core.mission_manager import MissionManager, MissionStatus
 from src.sensing.nexus_intake import NexusIntake, SensorDomain
 from src.sensing.fusion_engine import FusionEngine, ActionRecommendation
 from src.agents.executors import ExecutorRegistry
+from src.agents.lesson_learner import LessonLearner
 
 log = logging.getLogger("network95.agent")
 
@@ -134,8 +135,9 @@ class _Stages:
         intake_result = ctx["__results__"].get("intake", {})
         objective = intake_result.get("objective", mission.objective)
 
-        # Rule-based decomposition — keywords → sub-tasks
-        sub_tasks = _decompose_objective(objective)
+        # Rule-based decomposition — keywords → sub-tasks, boosted by lesson history
+        lesson_weights = agent.lesson_learner.type_weights(objective)
+        sub_tasks = _decompose_objective(objective, lesson_weights=lesson_weights)
 
         log.info("[DECOMPOSE] mission=%s sub_tasks=%d", mission.mission_id[:8], len(sub_tasks))
         return {
@@ -262,12 +264,30 @@ class _Stages:
             "pipeline_summary": agent.learner.summary(),
         }
 
+        # Enrich lesson with sub-task outcomes for lesson_learner feedback
+        execute_result = ctx["__results__"].get("execute", {})
+        task_results = execute_result.get("task_results", [])
+        decompose_result = ctx["__results__"].get("decompose", {})
+        sub_tasks_by_id = {t["id"]: t for t in decompose_result.get("sub_tasks", [])}
+        lesson["sub_tasks"] = [
+            {
+                "id": r.get("task_id"),
+                "type": sub_tasks_by_id.get(r.get("task_id", ""), {}).get("type", "local"),
+                "status": r.get("status", "unknown"),
+                "duration_s": r.get("duration_s", 0.0),
+            }
+            for r in task_results
+        ]
+
         # Append to lessons log (JSON lines)
         _append_lesson(lesson)
 
+        # Refresh lesson learner so next mission benefits immediately
+        agent.lesson_learner.refresh()
+
         log.info(
-            "[LEARN] mission=%s passed=%s lesson_stored",
-            mission.mission_id[:8], verify_result.get("passed"),
+            "[LEARN] mission=%s passed=%s lesson_stored sub_tasks=%d",
+            mission.mission_id[:8], verify_result.get("passed"), len(task_results),
         )
         return {
             "stage": "persist_learn",
@@ -309,22 +329,34 @@ class _Stages:
 
 # ── Objective decomposition helpers ──────────────────────────────────────────
 
-def _decompose_objective(objective: str) -> List[Dict]:
+def _decompose_objective(
+    objective: str,
+    lesson_weights: Optional[Dict[str, float]] = None,
+) -> List[Dict]:
     """
-    Keyword-based decomposer. In production this would call an LLM
-    (e.g. via OrchestratorEngine → local Ollama model), but the structure
-    is fully compatible with replacing this function with an async LLM call.
+    Keyword-based decomposer augmented by lesson history weights.
+    lesson_weights maps {task_type: success_rate} — types with high weights
+    are preferred when the keyword match is ambiguous.
     """
     obj_lower = objective.lower()
+    lw = lesson_weights or {}
     tasks: List[Dict] = []
     counter = [0]
 
     def add(name: str, task_type: str, estimated_s: float = 5.0):
         counter[0] += 1
+        # If lessons suggest a better-performing type for this keyword, swap it in
+        boosted_type = task_type
+        if lw:
+            candidates = {t: w for t, w in lw.items() if w > 0.7}
+            if candidates and task_type not in candidates:
+                best = max(candidates, key=candidates.__getitem__)
+                if best in ("ollama", "embedding", "inference") and task_type == "local":
+                    boosted_type = best
         tasks.append({
             "id": f"t{counter[0]:03d}",
             "name": name,
-            "type": task_type,
+            "type": boosted_type,
             "estimated_s": estimated_s,
         })
 
@@ -427,6 +459,7 @@ class Network95Agent:
         self.fusion = FusionEngine(criteria=self.config.get("fusion_criteria"))
         self.learner = PipelineLearner()
         self.executors = ExecutorRegistry(config=self.config.get("executors"))
+        self.lesson_learner = LessonLearner()
         self.pipeline = PipelineManager(
             config=self.config.get("pipeline", {}),
             learner=self.learner,
@@ -526,6 +559,7 @@ class Network95Agent:
             "mission_dashboard": self.mission_manager.dashboard(),
             "intake": self.intake.stats(),
             "pipeline_learner": self.learner.summary(),
+            "lesson_learner": self.lesson_learner.summary(),
             "devices": {
                 k: {"name": v["name"], "available": v["available"]}
                 for k, v in DEVICE_REGISTRY.items()

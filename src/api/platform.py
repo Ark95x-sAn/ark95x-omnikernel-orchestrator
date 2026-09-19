@@ -154,9 +154,13 @@ async def _telemetry_loop():
 
 
 async def _sensing_loop():
-    """Run a CSI simulation cycle every 15 seconds and post to feed."""
+    """Run a CSI simulation cycle every 15 seconds, post to feed, and push into NEXUS-1."""
     if not _sensing:
         return
+    try:
+        from src.sensing.nexus_bridge import ingest_sensing_result as _nexus_ingest
+    except Exception:
+        _nexus_ingest = None
     while True:
         await asyncio.sleep(15)
         try:
@@ -177,6 +181,9 @@ async def _sensing_loop():
                     },
                     "ts": time.time(),
                 })
+            # Bridge WiFi sensing results into NEXUS-1 intake for fusion pipeline
+            if _nexus_ingest and _network95_agent:
+                _nexus_ingest(_network95_agent.intake, result)
         except Exception as e:
             logger.debug(f"Sensing loop error: {e}")
 
