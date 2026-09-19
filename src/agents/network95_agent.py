@@ -32,6 +32,7 @@ from src.core.pipeline_learn import PipelineLearner
 from src.core.mission_manager import MissionManager, MissionStatus
 from src.sensing.nexus_intake import NexusIntake, SensorDomain
 from src.sensing.fusion_engine import FusionEngine, ActionRecommendation
+from src.agents.executors import ExecutorRegistry
 
 log = logging.getLogger("network95.agent")
 
@@ -182,16 +183,23 @@ class _Stages:
         batch = agent.intake.synchronize(window_s=1.0)
         action = agent.fusion.run(batch)
 
-        # Simulate / stub execution per routed task
-        task_results: List[Dict] = []
+        # Execute each routed task via real executor adapters
+        decompose_result = ctx["__results__"].get("decompose", {})
+        sub_tasks_by_id = {t["id"]: t for t in decompose_result.get("sub_tasks", [])}
+
+        coros = []
         for rp in routing_plan:
-            await asyncio.sleep(0)   # yield to event loop
-            task_results.append({
-                "task_id": rp["task_id"],
-                "device": rp["device"],
-                "status": "completed",
-                "output": f"[{rp['device_info']}] executed: {rp['task_name']}",
-            })
+            task = sub_tasks_by_id.get(rp["task_id"], {"id": rp["task_id"], "name": rp["task_name"], "type": "local"})
+            coros.append(agent.executors.execute(task))
+
+        raw_results = await asyncio.gather(*coros, return_exceptions=True)
+
+        task_results: List[Dict] = []
+        for rp, raw in zip(routing_plan, raw_results):
+            if isinstance(raw, Exception):
+                task_results.append({"task_id": rp["task_id"], "device": rp["device"], "status": "failed", "error": str(raw)})
+            else:
+                task_results.append({**raw, "device": rp["device"]})
 
         log.info(
             "[EXECUTE] mission=%s tasks_run=%d sensor_action=%s",
@@ -418,6 +426,7 @@ class Network95Agent:
         self.intake = NexusIntake()
         self.fusion = FusionEngine(criteria=self.config.get("fusion_criteria"))
         self.learner = PipelineLearner()
+        self.executors = ExecutorRegistry(config=self.config.get("executors"))
         self.pipeline = PipelineManager(
             config=self.config.get("pipeline", {}),
             learner=self.learner,

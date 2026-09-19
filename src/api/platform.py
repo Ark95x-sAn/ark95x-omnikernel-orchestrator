@@ -36,6 +36,15 @@ except Exception as _te:
     _mindstate = _aura = _roi = None
     logging.getLogger("ark95x.platform").warning(f"Telemetry unavailable: {_te}")
 
+try:
+    from src.agents.network95_agent import Network95Agent
+    from src.api.network95_router import router as _network95_router, set_agent as _set_n95_agent
+    _network95_agent = Network95Agent()
+    _set_n95_agent(_network95_agent)
+except Exception as _n95_err:
+    _network95_agent = None
+    logging.getLogger("ark95x.platform").warning(f"NETWORK-95 unavailable: {_n95_err}")
+
 logger = logging.getLogger("ark95x.platform")
 
 # ── App init ───────────────────────────────────────────────────────────────────
@@ -45,6 +54,9 @@ app = FastAPI(
     description="Digital twin social platform — consciousness made operational",
     version="1.0.0",
 )
+
+if _network95_agent is not None:
+    app.include_router(_network95_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -96,6 +108,8 @@ async def start_background():
     asyncio.create_task(_pulse_loop())
     asyncio.create_task(_sensing_loop())
     asyncio.create_task(_telemetry_loop())
+    if _network95_agent is not None:
+        asyncio.create_task(_network95_agent.autonomous_loop())
 
 
 async def _pulse_loop():
