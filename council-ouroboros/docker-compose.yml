@@ -6,9 +6,9 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: ouroboros
-      POSTGRES_PASSWORD: ouroboros
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       POSTGRES_DB: ouroboros
-    ports: ["5432:5432"]
+    ports: ["127.0.0.1:5432:5432"]
     volumes: ["pgdata:/var/lib/postgresql/data"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ouroboros"]
@@ -17,25 +17,25 @@ services:
 
   chroma:
     image: chromadb/chroma:latest
-    ports: ["8000:8000"]
+    ports: ["127.0.0.1:8000:8000"]
     volumes: ["chromadata:/chroma/.chroma"]
 
   ollama:
     image: ollama/ollama:latest
-    ports: ["11434:11434"]
+    ports: ["127.0.0.1:11434:11434"]
     volumes: ["ollamadata:/root/.ollama"]
 
   prometheus:
     image: prom/prometheus:latest
-    ports: ["9090:9090"]
+    ports: ["127.0.0.1:9090:9090"]
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
 
   grafana:
     image: grafana/grafana:latest
-    ports: ["3000:3000"]
+    ports: ["127.0.0.1:3000:3000"]
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: ouroboros
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set}
     volumes: ["grafanadata:/var/lib/grafana"]
 
   council-ouroboros:

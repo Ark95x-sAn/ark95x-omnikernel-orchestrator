@@ -36,6 +36,10 @@ jobs:
           echo "GATED_FILING=dry" >> council-ouroboros/.env 2>/dev/null || true
           echo "GATED_EMAIL=dry" >> council-ouroboros/.env 2>/dev/null || true
           echo "GATED_MERGE=dry" >> council-ouroboros/.env 2>/dev/null || true
+          echo "POSTGRES_PASSWORD=ci-placeholder" >> council-ouroboros/.env 2>/dev/null || true
+          echo "GRAFANA_ADMIN_PASSWORD=ci-placeholder" >> council-ouroboros/.env 2>/dev/null || true
+          echo "REDIS_PASSWORD=ci-placeholder" >> .env 2>/dev/null || true
+          echo "QDRANT_API_KEY=ci-placeholder" >> .env 2>/dev/null || true
 
       - name: Python syntax check (non-fatal)
         continue-on-error: true

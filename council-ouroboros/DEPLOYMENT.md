@@ -35,7 +35,7 @@ Each gated action still emits Twilio SMS to `ALERT_SMS_NUMBER` and waits for hum
 - Set `ROUTER_MODE=api-only` once all voters have API keys
 - Move Postgres + Chroma to managed services
 - Add backup cron for `./out/staged/`
-- Configure Grafana dashboards (port 3000, default pwd `ouroboros`)
+- Configure Grafana dashboards on loopback port 3000 using `GRAFANA_ADMIN_PASSWORD` from `.env` (do not commit the value)
 
 ## Voter roster (post-rotation 2026-05-18)
 | Voter | Role | Weight | Required env |
